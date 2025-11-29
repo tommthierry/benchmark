@@ -1,0 +1,24 @@
+{
+  "name": "sabe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "app/shared",
+    "app/server",
+    "app/client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=app/server",
+    "dev:client": "npm run dev --workspace=app/client",
+    "build": "npm run build --workspaces",
+    "build:shared": "npm run build --workspace=app/shared",
+    "build:server": "npm run build --workspace=app/server",
+    "build:client": "npm run build --workspace=app/client",
+    "start": "npm run start --workspace=app/server",
+    "clean": "rm -rf app/*/dist app/*/node_modules node_modules"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

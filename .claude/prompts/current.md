@@ -1,21 +1,289 @@
 
+# CONTEXT
+
+We are currently creating a new application from start.
+We are right now at the start of the project, the app is really not release this is our main global goal.
+
+You can read all of our project from file in ./plan
+
+You need to start with :
+plan\HIGH_LEVEL_DISCOVERY.md
+plan\MASTER_PLAN.md
+
+
+The new goal here is continue to create our app from where we are right now.
+
+Read plan\PHASE_2_LLM_INTEGRATION.md
+This is what your task is for this turn is to execute this plan.
+Make sure to browse if needed for best practice, library documentation and last version because don't forget you are an ai agent with an old cutting date training. Be aware of that and use tools that will be able to help you with that.
+
+This is a proper thinking and plan but it is not OUR own plan, we need to revalidate and make sure to create our own plan that will work in our own app on our own flow.
+
+We have a lot to do and accomplish here, as you can see—a lot of new concepts and specific tools for a specific feature.
+It's important to consider that we already have a lot of tools and we want to follow the same architecture/flow and logic so that everything stays DRY, scalable and more importantly maintenable.
+
+## Execution
+It is now time to go on and execute the next phase that is yet to be done (in order).
+One phase at time.
+You will go on and execute the next phase available and ready to be executed. You will follow our plan and our logic.
+You will create your own internal plan / steps to keep track and once you have executed, tested, double check and documented you will make sure to update documents (.md) so that the next agent knows exactly what next phase is ready to for him to tackle.
+Make sure to challenge it when/if needed, things need to be kept dry and more importantly best practice.
+You do not test in the frontend, the user does. You can test api, backend stuffs with unit test.
+
+You need to understand that the next phase will not be done by you but by other AI coding agent in different iteration.
+We will have to always keep in mind about LLM main limitation which is the content length. So yes we need to be in depth but not have file to crazy, we should follow best practice here.
+
+## Big Task Alert
+It's a big task and I want you to do first create your own plan, step by step with a clear, complete and detailled.
+Remember, you can browse the web if you need up to date information, documentation or look for specific libraries at any point.
+At anytime if you find something like an error or a new concept that is impacting the plan, make sure to revalidate and asses if the plan is still ok or if it needs adjustments based on the specific situation you are in.
+
+Decide in the best way to do this task for our project, specifications and requirements.
+It's a big project so in everything we do/create/update, the main focus is that we want resusability, DRY and simple clean code.
+
+## Implementation Guidelines
+
+1. **Build on What Exists**: Understand and properly integrate with existing code
+2. **Maintain Consistency**: Follow established patterns and conventions in the codebase
+3. **Test Everything**: Test new features AND their integration with existing ones
+4. **Validate Assumptions**: Use web browsing to verify library versions, best practices, and current standards
+5. **Challenge the Plan if Needed**: If you discover issues or better approaches, document them and adjust
+6. **Keep It Clean**: Refactor if needed to maintain code quality as the project grows
+
+Always keep this in mind and make this clear in the plan and architecture file you will create.
+
+---
+
+We really want to make things easy to read and not add non relevant things per file because we are using llm coding agent that are token limited by their context length.
+
+----
+
+Message from the previous agent:
+ Phase 5: Frontend - COMPLETED
+
+  I have successfully implemented the complete React frontend for the SABE benchmarking platform. Here's a summary
+  of what was accomplished:
+
+  Files Created
+
+  Configuration & Setup:
+  | File                    | Purpose                           |
+  |-------------------------|-----------------------------------|
+  | app/client/package.json | Updated with new dependencies     |
+  | app/client/src/main.tsx | QueryClient + BrowserRouter setup |
+  | app/client/src/App.tsx  | Route definitions                 |
+
+  Core Infrastructure:
+  | File                                        | Purpose                               |
+  |---------------------------------------------|---------------------------------------|
+  | app/client/src/lib/api.ts                   | API client with all endpoints + types |
+  | app/client/src/stores/uiStore.ts            | Zustand store for UI state            |
+  | app/client/src/components/Layout.tsx        | Main layout with dual navigation      |
+  | app/client/src/components/RankingsChart.tsx | ECharts trend visualization           |
+
+  User Pages:
+  | File                                  | Purpose                               |
+  |---------------------------------------|---------------------------------------|
+  | app/client/src/pages/RankingsPage.tsx | Rankings dashboard with table + stats |
+  | app/client/src/pages/RunsPage.tsx     | Run history with progress + details   |
+
+  Admin Pages:
+  | File                                             | Purpose                               |
+  |--------------------------------------------------|---------------------------------------|
+  | app/client/src/pages/admin/ProvidersPage.tsx     | Provider CRUD + connectivity test     |
+  | app/client/src/pages/admin/ModelsPage.tsx        | Model CRUD + import from provider API |
+  | app/client/src/pages/admin/QuestionsPage.tsx     | Question CRUD with eval criteria      |
+  | app/client/src/pages/admin/QuestionTypesPage.tsx | Question type CRUD                    |
+  | app/client/src/pages/admin/SettingsPage.tsx      | System status dashboard               |
+
+  Dependencies Added
+
+  - react-router ^7.9.0 - Routing
+  - @tanstack/react-query ^5.90.0 - Data fetching/caching
+  - @tanstack/react-table ^8.20.0 - Tables (available for future use)
+  - zustand ^5.0.8 - Client state
+  - echarts ^5.6.0 - Charts
+  - echarts-for-react ^3.0.5 - React wrapper
+  - lucide-react ^0.555.0 - Icons
+  - clsx ^2.1.1 - CSS utilities
+
+  Key Features Implemented
+
+  1. User/Admin Mode Toggle - Persisted preference, different navigation
+  2. Rankings Dashboard - Table with scores, position changes, period comparison
+  3. Trend Chart - ECharts visualization of model score history
+  4. Run Management - Start runs, view progress, cancel, see summaries
+  5. Provider Management - Full CRUD + connectivity testing
+  6. Model Import - Fetch models from provider API and import selected ones
+  7. Question Management - Full CRUD with evaluation criteria editor
+  8. System Settings - Health status, provider status, database statistics
+
+  Verification Results
+
+  - TypeScript builds successfully
+  - All API endpoints verified working
+  - Backend health check: OK
+  - Rankings API: Returns data with model details
+  - Runs API: Lists runs with pagination
+  - Providers API: Lists configured providers
+
+  Next Phase
+
+  Phase 6: Automation is ready to be tackled. The next agent should:
+  1. Read plan/PHASE_6_AUTOMATION.md
+  2. Implement node-cron scheduler
+  3. Configure weekly/monthly benchmark schedules
+  4. Add LLM-as-Judge evaluation
+  5. Add monitoring and notifications
 
 
 
-lets enhance our ux/ui. overall in the main layout of our app.
 
-I want to review our main page/layout ux.
 
-So I want first for the gallery section:
-- One column by default, but size of thumbnail is 1.5 bigger.
 
-B Effect section / sidebar left.
-Remove "Choose a transformation style" make the sidebar a bit bigger in term of width and also size of images.
 
-Remove section:
 
-17 effects loaded
-Refresh effects
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+plan\HIGH_LEVEL_DISCOVERY.md is the final recommandation and way we will do things.
+
+Ok, now your role is to act the project project manager, product owner and main tech lead developer all together to create the main document of concept, complete and comprehensive plan in phase and step by step for each phase.
+
+Your goal is to create multiple document that will be each phase of our project and for each phase you will double check things browsing to be sure of best practice and latest libraries we will use as well and creating a comphrehensive step by step plan to follow and focus on.
+
+Understand that the plan will be execute by coding agent that will start from nothing and will need to understand the global picture and the project goal and more importantly the goal to accomplish on each phase and what has beed done previously so the plan need to be trackable and clear and complete, while still being not too long so that we don't fill the context lenght of our ai coding agent from the start.
+
+For this step, the goal is not to do any coding at all.
+We are in the searching, analyzing options, and planning phase of our execution.
+We will evaluate our options and look at what we have already set up in our app as documentation for these steps.
+
+This is a really big iteration that we want to accomplish, so we need to decompose it into phases, where each phase also has multiple clear steps. Set it up in a way where agents understand what was done, what is yet to be done, what's the next phase/step to do, and how to mark things as done.
+
+Your outputs files will be place in ./plan along plan\HIGH_LEVEL_DISCOVERY.md.
+
+You will create the new plan files, for the next coding agents to understand what we are trying to do. Then, each PHASE will be a clear pathway to a specific part of the execution.
+We really want to make things easy to read and not add irrelevant things per file, because we are using LLM coding agents that are token-limited by their context length.
+
+You need to understand that the next steps will not be done by you but by other AI coding agents in different iterations. So your output needs to contain all the important details of what we want to accomplish, be a perfect plan for the agent to understand what to do and when, and be able to know what has been done, continue, and then indicate what has been done.
+We will always need to keep in mind the LLM's main limitation, which is the content length. So yes, we need to be in-depth, but not have files that are too large. We should follow best practices here.
+
+
+All of it really need to be grounded on our project concept and what we want to do.
+Coding need to follow current standard and best practice on each phase. Each phase need to be testable, and well documentated too.
+
+
+
+
+
+
+
+
+
+
+
+
+
+First read plan\HIGH_LEVEL_DISCOVERY.md and all recommanded file listed in it. Then once you have read all of them come back to me and I'll tell you what your goal is and how to do it.
+
+Do nothing else than read here.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Ok so we are in the thinking phase of our project where we have the ID but not the definitive solution of how we will do it and what stack we will use.
+
+You will be able to find our current doc here: ./analysis
+Read it all first.
+
+Then once you have all I want you do proceed to do this:
+
+I want to challenge tu overall stack and plan on how to do it.
+I would like the stack to be even more simple.
+It's a fun project so I'm not to worry to scale this up.
+
+I pasted the architecture from another project that I found way more simple you will find it
+other\ARCHITECTURE.md
+
+I like how simple it is and how encapsulated it is.
+Easy libraries with docker and all of it still secure.
+
+I think we should go toward that route.
+
+Then once you have the complete understand I want you to also question the project and try to keep things as simple as possible. Again its really light and we should not want to make things to ready for changes.
+
+The end result is a board of AI that question themselves and rank themselves.
+We need to be able to have an admin section to enable /disable model easily.
+To also edit prompt we will send to AI from the master of a turn to the llm answering and all.
+
+-------------
+Now that you know what the project is, you will create a complete, base plan to setup "the base" of our project.
+Really the base, so that we can load an hello world type of url in the brower with all our main librarie install, setup, ready to grow and be scaled up.
+
+You know the project, now your job is to investigated, browse, search the lastest best library/setup/architecture for our app.
+
+Really go in depth to check what would be the best setup for us to start with that would let us scale to accomplish our need based on our app logic,concept.
+
+I want you to create a comprehensive document HIGH LEVEL of our project in ./plan folder.
+HIGH LEVEL as the goal of the document is to be high level enough for the next agent (with fresh context legnth as you will be at the end full) to read and play the role of the product owner and lead developper creating the complete in depth plan, phase by phase, step by step and.
+
+As you understand you role is key, do not assume, read it all, search it it and don't slack on the job because we need you to be the best you can and create the perfect and most complete HIGH LEVEL plan. Don't code, don't phase, don't add steps. The next agent will manage all of that.
+You need to make a document that indicate CLEARLY whats the project, whats the best architecture/stack possible for us, what are the most important point to understand and know about our project and all of that. You are doing the discovery phase of the project and the next agent will do the planning.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

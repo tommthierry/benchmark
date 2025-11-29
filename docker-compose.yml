@@ -1,0 +1,25 @@
+services:
+  sabe:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sabe
+    ports:
+      - "3000:3000"
+    volumes:
+      - sabe-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sabe-data:
+    driver: local

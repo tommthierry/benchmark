@@ -27,7 +27,15 @@
       "WebFetch(domain:agents.md)",
       "WebFetch(domain:ai.google.dev)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(IMAGE_PROVIDER=gemini-imagen docker compose up --build -d)"
+      "Bash(IMAGE_PROVIDER=gemini-imagen docker compose up --build -d)",
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(docker:*)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:orm.drizzle.team)",
+      "Bash(npm run db:generate:*)",
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(npm run build:*)"
     ],
     "defaultMode": "acceptEdits"
   }
