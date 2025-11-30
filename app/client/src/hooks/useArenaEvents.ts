@@ -198,29 +198,33 @@ export function useArenaEvents(
       });
     };
 
-    // Register handlers
+    // Register handlers - use refs to avoid recreating connection on callback change
     addEventHandler('connected', () => {
       // Connection confirmed by server
     });
-    addEventHandler<StateSnapshotEvent>('state_snapshot', onStateSnapshot);
-    addEventHandler<SessionStartedEvent>('session:started', onSessionStarted);
-    addEventHandler<RoundStartedEvent>('round:started', onRoundStarted);
-    addEventHandler<StepStartedEvent>('step:started', onStepStarted);
-    addEventHandler<StepCompletedEvent>('step:completed', onStepCompleted);
-    addEventHandler<RoundCompletedEvent>('round:completed', onRoundCompleted);
-    addEventHandler<SessionCompletedEvent>('session:completed', onSessionCompleted);
+    addEventHandler<StateSnapshotEvent>('state_snapshot', (data) => {
+      callbacksRef.current.onStateSnapshot?.(data);
+    });
+    addEventHandler<SessionStartedEvent>('session:started', (data) => {
+      callbacksRef.current.onSessionStarted?.(data);
+    });
+    addEventHandler<RoundStartedEvent>('round:started', (data) => {
+      callbacksRef.current.onRoundStarted?.(data);
+    });
+    addEventHandler<StepStartedEvent>('step:started', (data) => {
+      callbacksRef.current.onStepStarted?.(data);
+    });
+    addEventHandler<StepCompletedEvent>('step:completed', (data) => {
+      callbacksRef.current.onStepCompleted?.(data);
+    });
+    addEventHandler<RoundCompletedEvent>('round:completed', (data) => {
+      callbacksRef.current.onRoundCompleted?.(data);
+    });
+    addEventHandler<SessionCompletedEvent>('session:completed', (data) => {
+      callbacksRef.current.onSessionCompleted?.(data);
+    });
 
-  }, [
-    disabled,
-    onStateSnapshot,
-    onSessionStarted,
-    onRoundStarted,
-    onStepStarted,
-    onStepCompleted,
-    onRoundCompleted,
-    onSessionCompleted,
-    invalidateQueries,
-  ]);
+  }, [disabled, invalidateQueries]);
 
   /**
    * Setup connection and cleanup

@@ -9,6 +9,7 @@ import { QuestionsPage } from './pages/admin/QuestionsPage';
 import { QuestionTypesPage } from './pages/admin/QuestionTypesPage';
 import { StatusPage } from './pages/admin/StatusPage';
 import { SettingsPage } from './pages/admin/SettingsPage';
+import { GamePage } from './pages/admin/GamePage';
 
 function App() {
   const location = useLocation();
@@ -30,6 +31,7 @@ function App() {
         <Route path="/runs" element={<RunsPage />} />
 
         {/* Admin routes */}
+        <Route path="/admin/game" element={<GamePage />} />
         <Route path="/admin/providers" element={<ProvidersPage />} />
         <Route path="/admin/models" element={<ModelsPage />} />
         <Route path="/admin/questions" element={<QuestionsPage />} />

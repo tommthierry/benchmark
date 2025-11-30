@@ -11,12 +11,14 @@ interface Model {
   status: 'idle' | 'thinking' | 'answered' | 'judging' | 'judged';
   hasAnswered?: boolean;
   hasJudged?: boolean;
+  answerPreview?: string; // First ~15 words of answer
 }
 
 interface ArenaCircleProps {
   models: Model[];
   masterId?: string;
   currentActorId?: string;
+  nextActorId?: string; // ID of model that will act next
   currentStepType?: string;
   onModelClick: (id: string) => void;
 }
@@ -25,12 +27,13 @@ export function ArenaCircle({
   models,
   masterId,
   currentActorId,
+  nextActorId,
   currentStepType,
   onModelClick,
 }: ArenaCircleProps) {
   // Calculate positions using circular math
   // Responsive sizing based on model count
-  const { positions, viewBox, radius } = useMemo(() => {
+  const { positions, viewBox } = useMemo(() => {
     const count = models.length;
     const centerX = 300;
     const centerY = 300;
@@ -49,7 +52,7 @@ export function ArenaCircle({
       };
     });
 
-    return { positions: pos, viewBox: vb, radius: baseRadius };
+    return { positions: pos, viewBox: vb };
   }, [models]);
 
   return (
@@ -135,6 +138,7 @@ export function ArenaCircle({
               y={y}
               isMaster={model.id === masterId}
               isActive={model.id === currentActorId}
+              isNext={model.id === nextActorId}
               stepType={model.id === currentActorId ? currentStepType : undefined}
               onClick={() => onModelClick(model.id)}
             />

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Activity,
   Swords,
+  Gamepad2,
 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 
@@ -31,6 +32,7 @@ const userNavItems = [
 ];
 
 const adminNavItems = [
+  { path: '/admin/game', label: 'Game', icon: Gamepad2 },
   { path: '/admin/providers', label: 'Providers', icon: Server },
   { path: '/admin/models', label: 'Models', icon: Bot },
   { path: '/admin/questions', label: 'Questions', icon: FileQuestion },

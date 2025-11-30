@@ -18,11 +18,12 @@ SABE follows an **admin-first** philosophy. All core entities are fully manageab
 
 | Entity | API Endpoint | Admin UI | Description |
 |--------|-------------|----------|-------------|
+| **Game Control** | `/api/arena/*` | `/admin/game` | Full game state + manual step control |
 | **Providers** | `/api/providers` | `/admin/providers` | LLM API providers (OpenRouter, etc.) |
 | **Models** | `/api/models` | `/admin/models` | LLM models with costs, context size |
 | **Questions** | `/api/questions` | `/admin/questions` | Benchmark prompts with eval criteria |
 | **Question Types** | `/api/questions/types` | `/admin/question-types` | Categories (reasoning, code, factual) |
-| **Config** | `/api/config` | `/admin/settings` | Execution mode (manual/cron), game settings |
+| **Config** | `/api/config` | `/admin/settings` | Game settings (rounds, step delay) |
 | **Runs** | `/api/runs` | User section | Benchmark executions |
 | **Rankings** | `/api/rankings` | Dashboard | Model rankings and trends |
 
@@ -223,13 +224,32 @@ function ArenaPage() {
 }
 ```
 
+## Admin Game Control Page
+
+Full game state visibility and manual step control for administrators.
+
+**Page:** `app/client/src/pages/admin/GamePage.tsx`
+- Route: `/admin/game` (first item in admin navigation)
+- Shows session status, current round, models, and next step preview
+- Manual trigger button (when in manual execution mode)
+- Session controls: Create, Pause, Resume
+
+**Key Components:**
+- `SessionCard` - Session status with progress stats
+- `RoundCard` - Current round with master, topic, question
+- `ModelsCard` - All participating models with status indicators
+- `NextStepCard` - Shows exactly what happens next + trigger button
+- `SessionControlsCard` - Session management buttons
+
 ## Public Arena UI (AI Arena Phase 3)
 
 Public-facing arena page where visitors can watch AI models compete in real-time.
 
 **Components in `app/client/src/components/arena/`:**
 - `ArenaCircle.tsx` - SVG circular layout for models
-- `ModelNode.tsx` - Individual model with state visualization
+- `ModelNode.tsx` - Individual model with state visualization, speech bubbles, next indicator
+- `SpeechBubble.tsx` - Shows answer preview (~15 words) after model answers
+- `RoundCompleteOverlay.tsx` - Animated leaderboard overlay at round end
 - `QuestionPanel.tsx` - Current question display
 - `ActivityFeed.tsx` - Live scrolling event feed
 - `RoundProgress.tsx` - Progress bar for rounds
@@ -239,9 +259,11 @@ Public-facing arena page where visitors can watch AI models compete in real-time
 - Route: `/arena` (standalone, no sidebar)
 - Real-time SSE integration via `useArenaEvents`
 - Local state management for display
+- Answer preview tracking for speech bubbles
+- Round complete overlay integration
 
 **Design System in `app/client/src/styles/`:**
-- `design-tokens.css` - CSS custom properties
+- `design-tokens.css` - CSS custom properties (includes bubble colors, next ring color)
 - `animations.ts` - Framer Motion variants
 
 **Viewing the Arena:**
@@ -250,7 +272,8 @@ Public-facing arena page where visitors can watch AI models compete in real-time
 npm run dev
 npm run dev:client
 
-# Open http://localhost:5173/arena
+# Open http://localhost:5173/arena (public view)
+# Open http://localhost:5173/admin/game (admin control)
 
 # Create session and trigger steps
 curl -X POST http://localhost:3000/api/arena/sessions \
@@ -264,10 +287,18 @@ curl -X POST http://localhost:3000/api/arena/trigger
 | Status | Visual |
 |--------|--------|
 | `idle` | Gray node |
-| `thinking` | Blue with rotating ring |
-| `answered` | Green border |
+| `thinking` | Blue with rotating ring + pulsing glow + typing dots |
+| `next` | Dashed blue ring (next to answer/judge) |
+| `answered` | Green border + speech bubble with preview |
 | `judging` | Yellow border |
 | `judged` | Green dot |
+
+**Round Completion:**
+When a round completes, an animated overlay shows:
+- Winner highlight with confetti particles
+- Leaderboard with staggered row animations
+- Question recap
+- Auto-dismisses after 15 seconds
 
 ## LLM Services (Phase 2)
 
