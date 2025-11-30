@@ -284,6 +284,112 @@ export const healthApi = {
   check: () => fetchApi<{ data: { status: 'ok' | 'error'; timestamp: string; version: string } }>('/health'),
 };
 
+// Execution Config type
+export interface ExecutionConfig {
+  id: string;
+  executionMode: 'cron' | 'manual';
+  cronExpression: string | null;
+  timezone: string | null;
+  autoStartEnabled: boolean | null;
+  roundsPerSession: number | null;
+  stepDelayMs: number | null;
+  updatedAt: string;
+}
+
+// Config API
+export const configApi = {
+  get: () => fetchApi<{ data: ExecutionConfig }>('/config'),
+  update: (data: Partial<Omit<ExecutionConfig, 'id' | 'updatedAt'>>) =>
+    fetchApi<{ data: ExecutionConfig }>('/config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+// =============================================================================
+// ARENA API
+// =============================================================================
+
+import type {
+  CurrentArenaState,
+  CreateSessionOptions,
+  TriggerStepResult,
+  ModelRoundDetail,
+  RoundScores,
+  GameSessionInfo,
+  RoundInfo,
+} from '@sabe/shared';
+
+/** Game session with rounds included */
+export interface GameSessionWithRounds extends GameSessionInfo {
+  rounds: RoundInfo[];
+}
+
+/** Round with all details */
+export interface RoundDetail extends RoundInfo {
+  masterName?: string;
+  topicName?: string;
+  steps: unknown[];
+  judgments: unknown[];
+}
+
+/** SSE connection status */
+export interface SSEStatus {
+  connectedClients: number;
+  timestamp: string;
+}
+
+// Arena API
+export const arenaApi = {
+  // Sessions
+  listSessions: () =>
+    fetchApi<{ data: GameSessionInfo[] }>('/arena/sessions'),
+
+  getSession: (id: string) =>
+    fetchApi<{ data: GameSessionWithRounds }>(`/arena/sessions/${id}`),
+
+  createSession: (options?: CreateSessionOptions) =>
+    fetchApi<{ data: GameSessionInfo }>('/arena/sessions', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    }),
+
+  startSession: (id: string) =>
+    fetchApi<{ data: { status: string; sessionId: string } }>(`/arena/sessions/${id}/start`, {
+      method: 'POST',
+    }),
+
+  pauseSession: (id: string) =>
+    fetchApi<{ data: { status: string; sessionId: string } }>(`/arena/sessions/${id}/pause`, {
+      method: 'POST',
+    }),
+
+  // Manual mode
+  trigger: (sessionId?: string) =>
+    fetchApi<{ data: TriggerStepResult }>('/arena/trigger', {
+      method: 'POST',
+      body: JSON.stringify(sessionId ? { sessionId } : {}),
+    }),
+
+  // State
+  getCurrentState: () =>
+    fetchApi<{ data: CurrentArenaState }>('/arena/current'),
+
+  // Rounds
+  getRound: (id: string) =>
+    fetchApi<{ data: RoundDetail }>(`/arena/rounds/${id}`),
+
+  getRoundScores: (id: string) =>
+    fetchApi<{ data: RoundScores }>(`/arena/rounds/${id}/scores`),
+
+  getModelRoundDetail: (roundId: string, modelId: string) =>
+    fetchApi<{ data: ModelRoundDetail }>(`/arena/rounds/${roundId}/models/${modelId}`),
+
+  // SSE Status
+  getSSEStatus: () =>
+    fetchApi<{ data: SSEStatus }>('/arena/events/status'),
+};
+
 // Re-export shared types for convenience
 export type {
   CreateProviderInput,

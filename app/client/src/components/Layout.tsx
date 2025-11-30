@@ -15,6 +15,8 @@ import {
   Tags,
   Shield,
   ChevronRight,
+  Activity,
+  Swords,
 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 
@@ -25,6 +27,7 @@ interface LayoutProps {
 const userNavItems = [
   { path: '/', label: 'Rankings', icon: BarChart3 },
   { path: '/runs', label: 'Run History', icon: History },
+  { path: '/arena', label: 'Arena', icon: Swords, external: true },
 ];
 
 const adminNavItems = [
@@ -32,6 +35,7 @@ const adminNavItems = [
   { path: '/admin/models', label: 'Models', icon: Bot },
   { path: '/admin/questions', label: 'Questions', icon: FileQuestion },
   { path: '/admin/question-types', label: 'Question Types', icon: Tags },
+  { path: '/admin/status', label: 'Status', icon: Activity },
   { path: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

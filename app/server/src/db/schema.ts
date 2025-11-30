@@ -147,6 +147,113 @@ export const rankings = sqliteTable('rankings', {
 });
 
 // =============================================================================
+// GAME SESSIONS - Arena session tracking
+// =============================================================================
+export const gameSessions = sqliteTable('game_sessions', {
+  id: text('id').primaryKey(),
+  status: text('status', {
+    enum: ['created', 'running', 'paused', 'completed', 'failed']
+  }).notNull().default('created'),
+  totalRounds: integer('total_rounds').notNull().default(5),
+  completedRounds: integer('completed_rounds').notNull().default(0),
+  currentRoundId: text('current_round_id'),
+  participatingModelIds: text('participating_model_ids', { mode: 'json' })
+    .$type<string[]>().notNull(),
+  config: text('config', { mode: 'json' }).$type<{
+    stepDelayMs?: number;
+    allowTies?: boolean;
+  }>(),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+// =============================================================================
+// ROUNDS - Individual rounds within a game session
+// =============================================================================
+export const rounds = sqliteTable('rounds', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => gameSessions.id),
+  roundNumber: integer('round_number').notNull(),
+  status: text('status', {
+    enum: ['created', 'topic_selection', 'question_creation', 'answering',
+           'judging', 'scoring', 'completed', 'failed']
+  }).notNull().default('created'),
+  masterId: text('master_id').notNull().references(() => models.id),
+  topicId: text('topic_id').references(() => questionTypes.id),
+  questionContent: text('question_content'),
+  questionDifficulty: text('question_difficulty', {
+    enum: ['easy', 'medium', 'hard', 'expert']
+  }),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+// =============================================================================
+// ROUND STEPS - Atomic steps within a round
+// =============================================================================
+export const roundSteps = sqliteTable('round_steps', {
+  id: text('id').primaryKey(),
+  roundId: text('round_id').notNull().references(() => rounds.id),
+  stepNumber: integer('step_number').notNull(),
+  stepType: text('step_type', {
+    enum: ['master_topic', 'master_question', 'model_answer', 'model_judge', 'scoring']
+  }).notNull(),
+  status: text('status', {
+    enum: ['pending', 'running', 'completed', 'failed', 'skipped']
+  }).notNull().default('pending'),
+  actorModelId: text('actor_model_id').references(() => models.id),
+  targetModelId: text('target_model_id').references(() => models.id),
+  inputData: text('input_data', { mode: 'json' }).$type<Record<string, unknown>>(),
+  outputData: text('output_data', { mode: 'json' }).$type<Record<string, unknown>>(),
+  llmResponseTimeMs: integer('llm_response_time_ms'),
+  llmTokensUsed: integer('llm_tokens_used'),
+  errorMessage: text('error_message'),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+// =============================================================================
+// MODEL JUDGMENTS - Peer evaluation scores
+// =============================================================================
+export const modelJudgments = sqliteTable('model_judgments', {
+  id: text('id').primaryKey(),
+  roundId: text('round_id').notNull().references(() => rounds.id),
+  stepId: text('step_id').notNull().references(() => roundSteps.id),
+  judgeModelId: text('judge_model_id').notNull().references(() => models.id),
+  targetModelId: text('target_model_id').notNull().references(() => models.id),
+  score: real('score').notNull(),
+  rank: integer('rank').notNull(),
+  reasoning: text('reasoning'),
+  criteriaScores: text('criteria_scores', { mode: 'json' }).$type<{
+    accuracy?: number;
+    clarity?: number;
+    creativity?: number;
+    completeness?: number;
+  }>(),
+  isMasterJudgment: integer('is_master_judgment', { mode: 'boolean' }).default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+// =============================================================================
+// EXECUTION CONFIG - Singleton configuration for arena execution
+// =============================================================================
+export const executionConfig = sqliteTable('execution_config', {
+  id: text('id').primaryKey().default('default'), // Always 'default'
+  executionMode: text('execution_mode', {
+    enum: ['cron', 'manual']
+  }).notNull().default('manual'),
+  cronExpression: text('cron_expression').default('0 2 * * 1'), // Weekly Monday 2AM
+  timezone: text('timezone').default('UTC'),
+  autoStartEnabled: integer('auto_start_enabled', { mode: 'boolean' }).default(false),
+  roundsPerSession: integer('rounds_per_session').default(5),
+  stepDelayMs: integer('step_delay_ms').default(2000), // Delay between steps
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// =============================================================================
 // TYPE EXPORTS - For TypeScript inference
 // =============================================================================
 export type Provider = typeof providers.$inferSelect;
@@ -165,3 +272,13 @@ export type Evaluation = typeof evaluations.$inferSelect;
 export type NewEvaluation = typeof evaluations.$inferInsert;
 export type Ranking = typeof rankings.$inferSelect;
 export type NewRanking = typeof rankings.$inferInsert;
+export type ExecutionConfig = typeof executionConfig.$inferSelect;
+export type NewExecutionConfig = typeof executionConfig.$inferInsert;
+export type GameSession = typeof gameSessions.$inferSelect;
+export type NewGameSession = typeof gameSessions.$inferInsert;
+export type Round = typeof rounds.$inferSelect;
+export type NewRound = typeof rounds.$inferInsert;
+export type RoundStep = typeof roundSteps.$inferSelect;
+export type NewRoundStep = typeof roundSteps.$inferInsert;
+export type ModelJudgment = typeof modelJudgments.$inferSelect;
+export type NewModelJudgment = typeof modelJudgments.$inferInsert;

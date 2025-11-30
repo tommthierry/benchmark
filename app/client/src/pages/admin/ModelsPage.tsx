@@ -506,15 +506,16 @@ function ModelForm({
             <input
               type="number"
               step="0.01"
+              min="0"
               value={formData.costInputPerMillion ?? ''}
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  costInputPerMillion: parseFloat(e.target.value) || undefined,
+                  costInputPerMillion: e.target.value === '' ? undefined : parseFloat(e.target.value),
                 })
               }
               className="w-full bg-gray-700 rounded px-3 py-2"
-              placeholder="3.00"
+              placeholder="3.00 (0 for free)"
             />
           </div>
           <div>
@@ -522,15 +523,16 @@ function ModelForm({
             <input
               type="number"
               step="0.01"
+              min="0"
               value={formData.costOutputPerMillion ?? ''}
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  costOutputPerMillion: parseFloat(e.target.value) || undefined,
+                  costOutputPerMillion: e.target.value === '' ? undefined : parseFloat(e.target.value),
                 })
               }
               className="w-full bg-gray-700 rounded px-3 py-2"
-              placeholder="15.00"
+              placeholder="15.00 (0 for free)"
             />
           </div>
         </div>

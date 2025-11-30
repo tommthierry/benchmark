@@ -1,4 +1,46 @@
 
+
+
+docs/docs_files.md - Will be the central point to read that list all the other docs file that exist in our app and what they are for
+docs/project.md - Contain the high level overview of our project, no logic, no code, user/project focus
+docs/deploy.md - Way to deploy and use the app in a production server - step by step
+docs/architecture.md
+docs/db.md
+docs/... all file you deemed useful to add
+
+ReadMe.md
+
+-------
+
+To understand our app in depth start reading our initial project plan file
+plan\HIGH_LEVEL_DISCOVERY.md
+plan\MASTER_PLAN.md
+plan\PHASE_0_FOUNDATION.md
+plan\PHASE_1_BACKEND_CORE.md
+plan\PHASE_1_IMPLEMENTATION_NOTES.md
+plan\PHASE_3_BENCHMARK_ENGINE.md
+plan\PHASE_4_RANKING_SYSTEM.md
+plan\PHASE_5_FRONTEND.md
+plan\PHASE_6_AUTOMATION.md
+
+Your first step is understand the situation, actual situation by verifying things in the code, not assuming, really read actual code.
+Then compare it to our documentation in docs/ for the step we just accomplished, and update when its out-dated.
+Validate each file that can be impacted by our changes but do not over-reached. Because We still want to keep things clean and lean.
+Remember that we are coding ai agent and that we are token limited by the context length.
+Follow current vibe / standard in the docs.
+
+Same as our code, for the documentation we really need keep it light and not repeat what's already there, we don’t recreate things.
+
+
+
+
+
+
+
+
+
+
+
 # CONTEXT
 
 We are currently creating a new application from start.

@@ -52,4 +52,5 @@ export type {
   TaskExecution, NewTaskExecution,
   Evaluation, NewEvaluation,
   Ranking, NewRanking,
+  ExecutionConfig, NewExecutionConfig,
 } from './schema.js';

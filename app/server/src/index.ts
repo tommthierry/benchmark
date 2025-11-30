@@ -16,6 +16,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getProviderManager } from './services/llm/index.js';
 import { getScheduler } from './scheduler/index.js';
 import { loadScheduleConfig } from './config/schedule.js';
+import { initializeEventBridge, cleanupEventBridge } from './services/event-bridge.js';
 
 // API Routes
 import providersRouter from './api/providers.js';
@@ -25,6 +26,8 @@ import llmRouter from './api/llm.js';
 import runsRouter from './api/runs.js';
 import rankingsRouter from './api/rankings.js';
 import scheduleRouter from './api/schedule.js';
+import configRouter from './api/config.js';
+import arenaRouter from './api/arena.js';
 
 // Logger setup
 const logger = pino({
@@ -62,6 +65,8 @@ app.use('/api/llm', llmRouter);
 app.use('/api/runs', runsRouter);
 app.use('/api/rankings', rankingsRouter);
 app.use('/api/schedule', scheduleRouter);
+app.use('/api/config', configRouter);
+app.use('/api/arena', arenaRouter);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -95,6 +100,10 @@ async function shutdown(signal: string): Promise<void> {
   const scheduler = getScheduler();
   scheduler.stop();
   logger.info('Scheduler stopped');
+
+  // Cleanup event bridge (close SSE connections)
+  cleanupEventBridge();
+  logger.info('Event bridge cleaned up');
 
   // Set timeout for forced exit
   const timeout = setTimeout(() => {
@@ -142,6 +151,10 @@ async function start(): Promise<void> {
     scheduler.updateConfig(scheduleConfig);
     scheduler.start();
     logger.info('Scheduler initialized');
+
+    // Initialize event bridge (SSE for arena real-time updates)
+    initializeEventBridge();
+    logger.info('Event bridge initialized');
 
     // Start HTTP server
     server = app.listen(PORT, () => {

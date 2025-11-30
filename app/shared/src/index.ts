@@ -32,3 +32,9 @@ export * from './types/benchmark.js';
 
 // Re-export Ranking types
 export * from './types/ranking.js';
+
+// Re-export Game types (AI Arena)
+export * from './types/game.js';
+
+// Re-export Arena SSE Event types
+export * from './types/events.js';

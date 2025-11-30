@@ -4,7 +4,9 @@
 
 SABE (Systeme Autonome de Benchmarking Evolutif) is an autonomous LLM benchmarking platform. Single Docker container, Node.js monorepo.
 
-**Current Status:** Phase 6 COMPLETED - Full Autonomous Platform
+**Current Status:** AI Arena COMPLETE - All 4 phases implemented
+
+**All AI Arena phases completed!** The system is fully functional.
 
 ## Admin-First Architecture
 
@@ -20,6 +22,7 @@ SABE follows an **admin-first** philosophy. All core entities are fully manageab
 | **Models** | `/api/models` | `/admin/models` | LLM models with costs, context size |
 | **Questions** | `/api/questions` | `/admin/questions` | Benchmark prompts with eval criteria |
 | **Question Types** | `/api/questions/types` | `/admin/question-types` | Categories (reasoning, code, factual) |
+| **Config** | `/api/config` | `/admin/settings` | Execution mode (manual/cron), game settings |
 | **Runs** | `/api/runs` | User section | Benchmark executions |
 | **Rankings** | `/api/rankings` | Dashboard | Model rankings and trends |
 
@@ -103,7 +106,7 @@ Implementation is split into phases in `plan/`:
 3. Status: ⬜ NOT STARTED → 🟡 IN PROGRESS → ✅ COMPLETED
 4. Follow verification checklist before moving to next phase
 
-## Phase Status
+## Phase Status (Original Benchmark Platform)
 
 - **Phase 0:** ✅ COMPLETED - Foundation, Docker, Hello World
 - **Phase 1:** ✅ COMPLETED - Backend Core (DB, APIs)
@@ -112,6 +115,159 @@ Implementation is split into phases in `plan/`:
 - **Phase 4:** ✅ COMPLETED - Ranking System (Calculator, Temporal Analysis, APIs)
 - **Phase 5:** ✅ COMPLETED - Frontend (React Dashboard, Admin UI)
 - **Phase 6:** ✅ COMPLETED - Automation (Scheduler, LLM-as-Judge, Graceful Shutdown)
+
+## AI Arena Phase Status
+
+- **Phase 0:** ✅ COMPLETED - Settings/Status Refactoring, Execution Config
+- **Phase 1:** ✅ COMPLETED - Game Engine (sessions, rounds, steps, judging)
+- **Phase 2:** ✅ COMPLETED - Real-time SSE Layer (event bridge, useArenaEvents hook)
+- **Phase 3:** ✅ COMPLETED - Public Arena UI (circular layout, real-time updates)
+
+## AI Arena Game Engine (Phase 1)
+
+Services in `app/server/src/services/`:
+- `getGameEngine()` - Singleton for game orchestration
+- `prompt-builder.ts` - Prompt templates for Master/Judge/Answer
+
+Arena API endpoints:
+- `GET /api/arena/sessions` - List all sessions
+- `POST /api/arena/sessions` - Create new session
+- `GET /api/arena/sessions/:id` - Session detail with rounds
+- `POST /api/arena/sessions/:id/start` - Start automatic mode
+- `POST /api/arena/sessions/:id/pause` - Pause session
+- `POST /api/arena/trigger` - Execute next step (manual mode)
+- `GET /api/arena/current` - Current game state for display
+- `GET /api/arena/rounds/:id` - Round detail with steps/judgments
+- `GET /api/arena/rounds/:id/scores` - Round rankings
+- `GET /api/arena/rounds/:roundId/models/:modelId` - Model round detail
+
+**Running the Arena (Manual Mode):**
+```bash
+# Create session
+curl -X POST http://localhost:3000/api/arena/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"totalRounds": 3}'
+
+# Trigger next step (repeat until session completes)
+curl -X POST http://localhost:3000/api/arena/trigger \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Check current state
+curl http://localhost:3000/api/arena/current
+```
+
+**Game Flow:**
+1. **Master Selection** - Rotating through models
+2. **Topic Selection** - Master picks from question types
+3. **Question Creation** - Master generates question
+4. **Answering** - Each non-master model answers sequentially
+5. **Judging** - All models judge (master included)
+6. **Scoring** - Aggregate scores, master breaks ties
+
+Database tables:
+- `game_sessions` - Session tracking
+- `rounds` - Individual rounds
+- `round_steps` - Atomic steps (topic, question, answer, judge, scoring)
+- `model_judgments` - Peer evaluation scores
+
+## Real-time SSE Layer (AI Arena Phase 2)
+
+Services in `app/server/src/services/`:
+- `event-bridge.ts` - Bridges GameEngine events to SSE clients
+- Heartbeat mechanism (30s interval keeps connections alive)
+
+Middleware in `app/server/src/middleware/`:
+- `sse.ts` - SSE middleware with `res.sse.send()` helpers
+
+SSE API endpoints:
+- `GET /api/arena/events` - SSE stream for real-time updates
+- `GET /api/arena/events/status` - Connected client count
+
+Client hook in `app/client/src/hooks/`:
+- `useArenaEvents.ts` - React hook for SSE with auto-reconnect
+
+**Event Types:**
+| Event | Description |
+|-------|-------------|
+| `connected` | Initial connection acknowledgment |
+| `state_snapshot` | Full current state on connect |
+| `session:created` | New session created |
+| `session:started` | Session started |
+| `round:started` | New round with master info |
+| `step:started` | Step began (model is thinking) |
+| `step:completed` | Step done with output |
+| `round:completed` | Round done with scores |
+| `session:completed` | Session finished |
+
+**Testing SSE:**
+```bash
+# Watch SSE events (stays connected)
+curl -N http://localhost:3000/api/arena/events
+
+# Check connected clients
+curl http://localhost:3000/api/arena/events/status
+```
+
+**Using the React hook:**
+```typescript
+import { useArenaEvents } from './hooks/useArenaEvents';
+
+function ArenaPage() {
+  const { isConnected } = useArenaEvents({
+    onStepCompleted: (data) => console.log('Step done:', data),
+    onRoundCompleted: (data) => console.log('Scores:', data.scores),
+  });
+
+  return <div>Connected: {isConnected ? '✓' : '✗'}</div>;
+}
+```
+
+## Public Arena UI (AI Arena Phase 3)
+
+Public-facing arena page where visitors can watch AI models compete in real-time.
+
+**Components in `app/client/src/components/arena/`:**
+- `ArenaCircle.tsx` - SVG circular layout for models
+- `ModelNode.tsx` - Individual model with state visualization
+- `QuestionPanel.tsx` - Current question display
+- `ActivityFeed.tsx` - Live scrolling event feed
+- `RoundProgress.tsx` - Progress bar for rounds
+- `ModelDetailModal.tsx` - Detailed view of model answer/judgments
+
+**Arena Page:** `app/client/src/pages/ArenaPage.tsx`
+- Route: `/arena` (standalone, no sidebar)
+- Real-time SSE integration via `useArenaEvents`
+- Local state management for display
+
+**Design System in `app/client/src/styles/`:**
+- `design-tokens.css` - CSS custom properties
+- `animations.ts` - Framer Motion variants
+
+**Viewing the Arena:**
+```bash
+# Start server and client
+npm run dev
+npm run dev:client
+
+# Open http://localhost:5173/arena
+
+# Create session and trigger steps
+curl -X POST http://localhost:3000/api/arena/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"totalRounds": 3}'
+
+curl -X POST http://localhost:3000/api/arena/trigger
+```
+
+**Model States:**
+| Status | Visual |
+|--------|--------|
+| `idle` | Gray node |
+| `thinking` | Blue with rotating ring |
+| `answered` | Green border |
+| `judging` | Yellow border |
+| `judged` | Green dot |
 
 ## LLM Services (Phase 2)
 
@@ -278,7 +434,8 @@ app/client/src/
         ├── ModelsPage.tsx       # CRUD + import from provider
         ├── QuestionsPage.tsx    # CRUD with eval criteria
         ├── QuestionTypesPage.tsx # CRUD
-        └── SettingsPage.tsx     # System status
+        ├── StatusPage.tsx       # System status (read-only)
+        └── SettingsPage.tsx     # Execution config (manual/cron, game settings)
 ```
 
 **Running the frontend:**
@@ -331,6 +488,33 @@ LLM_JUDGE_MODEL=anthropic/claude-3.5-sonnet
 ```bash
 curl http://localhost:3000/api/schedule
 # Returns: {"data":{"isRunning":true,"tasks":["weekly","monthly"],"nextRuns":{...}}}
+```
+
+## Execution Config (Phase 0)
+
+The execution config controls the arena game flow. Stored in `execution_config` table.
+
+**API Endpoints:**
+- `GET /api/config` - Get current configuration
+- `PUT /api/config` - Update configuration
+
+**Configuration fields:**
+- `executionMode`: `'manual'` or `'cron'`
+- `cronExpression`: Cron schedule (e.g., `'0 2 * * 1'` = Monday 2AM)
+- `timezone`: Timezone for cron (default: UTC)
+- `autoStartEnabled`: Whether to auto-start on server boot
+- `roundsPerSession`: Number of rounds per game session
+- `stepDelayMs`: Delay between steps (for visibility)
+
+**Example:**
+```bash
+# Get config
+curl http://localhost:3000/api/config
+
+# Switch to cron mode
+curl -X PUT http://localhost:3000/api/config \
+  -H "Content-Type: application/json" \
+  -d '{"executionMode":"cron","cronExpression":"0 3 * * *"}'
 ```
 
 ## Gotchas
