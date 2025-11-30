@@ -20,6 +20,8 @@ interface ArenaCircleProps {
   currentActorId?: string;
   nextActorId?: string; // ID of model that will act next
   currentStepType?: string;
+  sessionStatus?: string; // created, running, paused, completed
+  roundStatus?: string; // topic_selection, answering, judging, scoring, completed
   onModelClick: (id: string) => void;
 }
 
@@ -29,6 +31,8 @@ export function ArenaCircle({
   currentActorId,
   nextActorId,
   currentStepType,
+  sessionStatus,
+  roundStatus,
   onModelClick,
 }: ArenaCircleProps) {
   // Calculate positions using circular math
@@ -106,27 +110,34 @@ export function ArenaCircle({
         />
 
         {/* Center status text */}
-        <text
-          x="300"
-          y="295"
-          textAnchor="middle"
-          fill="var(--color-text-secondary)"
-          fontSize="13"
-          fontFamily="inherit"
-          fontWeight="500"
-        >
-          {getStepLabel(currentStepType)}
-        </text>
-        <text
-          x="300"
-          y="315"
-          textAnchor="middle"
-          fill="var(--color-text-muted)"
-          fontSize="11"
-          fontFamily="inherit"
-        >
-          {models.length} models
-        </text>
+        {(() => {
+          const { label, sublabel, color } = getCenterStatus(sessionStatus, roundStatus, currentStepType);
+          return (
+            <>
+              <text
+                x="300"
+                y="295"
+                textAnchor="middle"
+                fill={color}
+                fontSize="13"
+                fontFamily="inherit"
+                fontWeight="500"
+              >
+                {label}
+              </text>
+              <text
+                x="300"
+                y="315"
+                textAnchor="middle"
+                fill="var(--color-text-muted)"
+                fontSize="11"
+                fontFamily="inherit"
+              >
+                {sublabel}
+              </text>
+            </>
+          );
+        })()}
 
         {/* Model nodes */}
         <AnimatePresence mode="sync">
@@ -149,19 +160,55 @@ export function ArenaCircle({
   );
 }
 
-function getStepLabel(stepType?: string): string {
-  switch (stepType) {
-    case 'master_topic':
-      return 'Selecting Topic';
-    case 'master_question':
-      return 'Creating Question';
-    case 'model_answer':
-      return 'Answering';
-    case 'model_judge':
-      return 'Judging';
-    case 'scoring':
-      return 'Scoring';
-    default:
-      return 'Waiting';
+function getCenterStatus(
+  sessionStatus?: string,
+  roundStatus?: string,
+  stepType?: string
+): { label: string; sublabel: string; color: string } {
+  // Active step takes priority
+  if (stepType) {
+    const stepLabels: Record<string, string> = {
+      master_topic: 'Selecting Topic',
+      master_question: 'Creating Question',
+      model_answer: 'Answering',
+      model_judge: 'Judging',
+      scoring: 'Calculating',
+    };
+    return {
+      label: stepLabels[stepType] ?? 'Processing',
+      sublabel: 'In progress...',
+      color: 'var(--color-accent)',
+    };
   }
+
+  // Round status when no active step
+  if (roundStatus) {
+    const roundLabels: Record<string, { label: string; sublabel: string }> = {
+      created: { label: 'Round Starting', sublabel: 'Preparing...' },
+      topic_selection: { label: 'Topic Phase', sublabel: 'Awaiting selection' },
+      question_creation: { label: 'Question Phase', sublabel: 'Awaiting question' },
+      answering: { label: 'Answer Phase', sublabel: 'Models responding' },
+      judging: { label: 'Judge Phase', sublabel: 'Peer evaluation' },
+      scoring: { label: 'Scoring', sublabel: 'Tallying results' },
+      completed: { label: 'Round Complete', sublabel: 'Next round soon' },
+    };
+    const info = roundLabels[roundStatus];
+    if (info) {
+      return { ...info, color: 'var(--color-text-secondary)' };
+    }
+  }
+
+  // Session status when no round
+  if (sessionStatus) {
+    const sessionLabels: Record<string, { label: string; sublabel: string; color: string }> = {
+      created: { label: 'Ready', sublabel: 'Awaiting start', color: 'var(--color-text-muted)' },
+      running: { label: 'Running', sublabel: 'Game in progress', color: 'var(--color-success)' },
+      paused: { label: 'Paused', sublabel: 'Waiting to resume', color: 'var(--color-warning)' },
+      completed: { label: 'Finished', sublabel: 'Game over', color: 'var(--color-success)' },
+    };
+    return sessionLabels[sessionStatus] ?? { label: 'Unknown', sublabel: sessionStatus, color: 'var(--color-text-muted)' };
+  }
+
+  // No session
+  return { label: 'No Game', sublabel: 'Start a session', color: 'var(--color-text-muted)' };
 }

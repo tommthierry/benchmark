@@ -70,9 +70,26 @@ function truncateText(text: string, maxChars: number): string {
 }
 
 /**
- * Get first N words from text
+ * Get first N words from text, stripping markdown formatting
  */
 export function getPreviewWords(text: string, wordCount: number = 15): string {
-  const words = text.split(/\s+/).slice(0, wordCount);
-  return words.join(' ') + (text.split(/\s+/).length > wordCount ? '...' : '');
+  // Strip common markdown formatting
+  const stripped = text
+    .replace(/```[\s\S]*?```/g, '[code]') // Code blocks
+    .replace(/`([^`]+)`/g, '$1') // Inline code
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
+    .replace(/\*([^*]+)\*/g, '$1') // Italic
+    .replace(/__([^_]+)__/g, '$1') // Bold alt
+    .replace(/_([^_]+)_/g, '$1') // Italic alt
+    .replace(/~~([^~]+)~~/g, '$1') // Strikethrough
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links
+    .replace(/^#+\s+/gm, '') // Headers
+    .replace(/^[-*+]\s+/gm, '') // List items
+    .replace(/^\d+\.\s+/gm, '') // Numbered lists
+    .replace(/^>\s+/gm, '') // Blockquotes
+    .replace(/\n+/g, ' ') // Newlines to spaces
+    .trim();
+
+  const words = stripped.split(/\s+/).slice(0, wordCount);
+  return words.join(' ') + (stripped.split(/\s+/).length > wordCount ? '...' : '');
 }

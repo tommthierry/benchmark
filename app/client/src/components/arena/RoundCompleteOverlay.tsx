@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, X, ChevronRight, Crown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Markdown } from '../Markdown';
 
 export interface RoundScore {
   modelId: string;
@@ -164,9 +165,13 @@ export function RoundCompleteOverlay({
               {topic && (
                 <div className="text-xs text-[var(--color-text-muted)] mb-1">{topic}</div>
               )}
-              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed line-clamp-3">
-                {question || 'No question available'}
-              </p>
+              <div className="text-sm text-[var(--color-text-secondary)] line-clamp-3">
+                {question ? (
+                  <Markdown compact>{question}</Markdown>
+                ) : (
+                  'No question available'
+                )}
+              </div>
               {masterName && (
                 <div className="text-xs text-[var(--color-text-muted)] mt-2">
                   Asked by {masterName}

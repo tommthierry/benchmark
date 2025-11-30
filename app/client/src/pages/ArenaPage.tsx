@@ -391,6 +391,8 @@ export function ArenaPage() {
               currentActorId={displayState.currentActorId ?? undefined}
               nextActorId={displayState.nextActorId ?? undefined}
               currentStepType={displayState.currentStepType ?? undefined}
+              sessionStatus={displayState.sessionStatus ?? undefined}
+              roundStatus={displayState.roundStatus ?? undefined}
               onModelClick={setSelectedModelId}
             />
           </div>

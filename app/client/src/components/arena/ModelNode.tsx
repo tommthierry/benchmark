@@ -224,26 +224,53 @@ export function ModelNode({
 
       {/* Master crown indicator */}
       {isMaster && (
-        <g transform={`translate(${x}, ${y - nodeRadius - 12})`}>
-          {/* Simple crown shape */}
-          <path
-            d="M-8,6 L-8,0 L-4,-5 L0,-2 L4,-5 L8,0 L8,6 Z"
+        <g transform={`translate(${x}, ${y - nodeRadius - 14})`}>
+          {/* Crown base band */}
+          <rect
+            x={-10}
+            y={4}
+            width={20}
+            height={4}
+            rx={1}
             fill="var(--color-master)"
             stroke="var(--color-bg-primary)"
-            strokeWidth="1"
+            strokeWidth="0.5"
+          />
+          {/* Crown body with 5 distinct points */}
+          <path
+            d="M-10,4 L-10,0 L-7,-6 L-5,-1 L0,-8 L5,-1 L7,-6 L10,0 L10,4 Z"
+            fill="var(--color-master)"
+            stroke="var(--color-bg-primary)"
+            strokeWidth="0.5"
+          />
+          {/* Center jewel (top point) */}
+          <circle
+            cx={0}
+            cy={-6}
+            r={2}
+            fill="#fff"
+            stroke="var(--color-master)"
+            strokeWidth="0.5"
+          />
+          {/* Left jewel */}
+          <circle
+            cx={-7}
+            cy={-4}
+            r={1.5}
+            fill="#fff"
+            opacity="0.8"
+          />
+          {/* Right jewel */}
+          <circle
+            cx={7}
+            cy={-4}
+            r={1.5}
+            fill="#fff"
+            opacity="0.8"
           />
         </g>
       )}
 
-      {/* Status indicator dot */}
-      <circle
-        cx={x + nodeRadius - 8}
-        cy={y - nodeRadius + 8}
-        r={6}
-        fill={getStatusColor(model.status, isActive)}
-        stroke="var(--color-bg-primary)"
-        strokeWidth="2"
-      />
     </motion.g>
   );
 }
@@ -251,20 +278,4 @@ export function ModelNode({
 function truncateName(name: string, maxLength: number): string {
   if (name.length <= maxLength) return name;
   return name.slice(0, maxLength - 1) + '…';
-}
-
-function getStatusColor(status: string, isActive: boolean): string {
-  if (isActive) return 'var(--color-accent)';
-  switch (status) {
-    case 'thinking':
-      return 'var(--color-accent)';
-    case 'answered':
-      return 'var(--color-success)';
-    case 'judging':
-      return 'var(--color-warning)';
-    case 'judged':
-      return 'var(--color-success)';
-    default:
-      return 'var(--color-text-muted)';
-  }
 }

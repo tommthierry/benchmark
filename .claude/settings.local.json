@@ -37,7 +37,11 @@
       "WebFetch(domain:openrouter.ai)",
       "Bash(npm run build:*)",
       "Bash(npm run db:push:*)",
-      "Bash(DATABASE_URL=/home/tthierry/TTProjects/benchmark/data/sabe.db npm run db:push:*)"
+      "Bash(DATABASE_URL=/home/tthierry/TTProjects/benchmark/data/sabe.db npm run db:push:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(dmesg:*)"
     ],
     "defaultMode": "acceptEdits"
   }

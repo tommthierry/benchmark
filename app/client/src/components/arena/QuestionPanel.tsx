@@ -4,6 +4,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, User } from 'lucide-react';
 import { slideUp } from '../../styles/animations';
+import { Markdown } from '../Markdown';
 
 interface QuestionPanelProps {
   question?: string | null;
@@ -33,9 +34,9 @@ export function QuestionPanel({ question, topic, masterName }: QuestionPanelProp
           transition={{ duration: 0.2 }}
         >
           {question ? (
-            <p className="text-base md:text-lg text-[var(--color-text-primary)] leading-relaxed">
-              {question}
-            </p>
+            <div className="text-base md:text-lg text-[var(--color-text-primary)]">
+              <Markdown>{question}</Markdown>
+            </div>
           ) : (
             <div className="text-center py-4">
               <p className="text-[var(--color-text-muted)] italic text-sm">

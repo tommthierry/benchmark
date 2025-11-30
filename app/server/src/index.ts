@@ -124,7 +124,12 @@ async function shutdown(signal: string): Promise<void> {
   }
 }
 
-// Register shutdown handlers
+// Register shutdown handlers (remove old ones first for hot reload)
+process.removeAllListeners('SIGTERM');
+process.removeAllListeners('SIGINT');
+process.removeAllListeners('uncaughtException');
+process.removeAllListeners('unhandledRejection');
+
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('uncaughtException', (error) => {

@@ -1,11 +1,13 @@
 // Modal showing model's answer, judgments, and reasoning
 // Fetches data from API when opened
 
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, MessageSquare, Star, Clock, Crown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { arenaApi } from '../../lib/api';
 import { modalBackdrop, modalContent } from '../../styles/animations';
+import { Markdown } from '../Markdown';
 
 interface ModelDetailModalProps {
   modelId: string;
@@ -14,6 +16,14 @@ interface ModelDetailModalProps {
 }
 
 export function ModelDetailModal({ modelId, roundId, onClose }: ModelDetailModalProps) {
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
   const { data, isLoading, error } = useQuery({
     queryKey: ['arena', 'model-detail', roundId, modelId],
     queryFn: () => arenaApi.getModelRoundDetail(roundId!, modelId),
@@ -82,8 +92,8 @@ export function ModelDetailModal({ modelId, roundId, onClose }: ModelDetailModal
                 {detail.answer && (
                   <section>
                     <SectionHeader icon={MessageSquare} title="Answer" />
-                    <div className="bg-[var(--color-bg-tertiary)] rounded-md p-3 text-sm text-[var(--color-text-secondary)] leading-relaxed">
-                      {detail.answer}
+                    <div className="bg-[var(--color-bg-tertiary)] rounded-md p-3 text-sm text-[var(--color-text-secondary)]">
+                      <Markdown>{detail.answer}</Markdown>
                     </div>
                     {detail.responseTimeMs && (
                       <div className="flex items-center gap-1.5 mt-2 text-xs text-[var(--color-text-muted)]">
@@ -133,9 +143,9 @@ export function ModelDetailModal({ modelId, roundId, onClose }: ModelDetailModal
                             </span>
                           </div>
                           {j.reasoning && (
-                            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-                              {j.reasoning}
-                            </p>
+                            <div className="text-xs text-[var(--color-text-secondary)]">
+                              <Markdown compact>{j.reasoning}</Markdown>
+                            </div>
                           )}
                         </div>
                       ))}
