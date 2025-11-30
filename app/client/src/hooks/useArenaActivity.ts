@@ -7,7 +7,7 @@ export interface ActivityItem {
   id: string;
   timestamp: string;
   message: string;
-  type: 'info' | 'step' | 'score' | 'system';
+  type: 'info' | 'step' | 'score' | 'system' | 'error';
 }
 
 interface UseArenaActivityOptions {

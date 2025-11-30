@@ -111,6 +111,8 @@ function getActivityColor(type: ActivityItem['type']): string {
       return 'var(--color-success)';
     case 'system':
       return 'var(--color-warning)';
+    case 'error':
+      return 'var(--color-error)';
     default:
       return 'var(--color-text-muted)';
   }

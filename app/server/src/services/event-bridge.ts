@@ -153,6 +153,8 @@ function mapEventName(internalType: string): ArenaEventType {
     round_completed: 'round:completed',
     step_started: 'step:started',
     step_completed: 'step:completed',
+    step_failed: 'step:failed',
+    step_cleaned_up: 'step:cleaned_up',
     step_undone: 'step:undone',
   };
 
@@ -291,6 +293,12 @@ export function initializeEventBridge(): void {
     // For session creation/end events, also broadcast a full state snapshot
     // so clients can reset their local state completely
     if (event.type === 'session_created' || event.type === 'session_ended') {
+      await broadcastStateSnapshot();
+    }
+
+    // After step failure or cleanup, broadcast state snapshot to ensure
+    // all clients have consistent state (in case they missed events)
+    if (event.type === 'step_failed' || event.type === 'step_cleaned_up') {
       await broadcastStateSnapshot();
     }
   });

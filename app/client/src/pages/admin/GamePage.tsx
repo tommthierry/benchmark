@@ -1,6 +1,7 @@
 // Admin Game Control Page
 // Full game state visibility and manual step control for AI Arena
 
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play,
@@ -17,12 +18,79 @@ import {
   Target,
   RotateCcw,
   RotateCw,
+  XCircle,
 } from 'lucide-react';
 import { arenaApi, configApi } from '../../lib/api';
-import type { CurrentArenaState, ArenaModel } from '@sabe/shared';
+import { useArenaEvents } from '../../hooks/useArenaEvents';
+import type { CurrentArenaState, ArenaModel, StepType } from '@sabe/shared';
+
+// Track current step execution status
+interface StepExecutionState {
+  isExecuting: boolean;
+  stepType: StepType | null;
+  actorId: string | null;
+  actorName: string | null;
+  error: string | null;
+}
 
 export function GamePage() {
   const queryClient = useQueryClient();
+
+  // Track step execution state via SSE
+  const [stepExecution, setStepExecution] = useState<StepExecutionState>({
+    isExecuting: false,
+    stepType: null,
+    actorId: null,
+    actorName: null,
+    error: null,
+  });
+
+  // SSE event handlers
+  const handleStepStarted = useCallback((data: { stepType: StepType; actorId?: string; actorName?: string }) => {
+    setStepExecution({
+      isExecuting: true,
+      stepType: data.stepType,
+      actorId: data.actorId ?? null,
+      actorName: data.actorName ?? null,
+      error: null,
+    });
+  }, []);
+
+  const handleStepCompleted = useCallback(() => {
+    setStepExecution({
+      isExecuting: false,
+      stepType: null,
+      actorId: null,
+      actorName: null,
+      error: null,
+    });
+  }, []);
+
+  const handleStepFailed = useCallback((data: { stepType: StepType; actorId?: string; error: string }) => {
+    setStepExecution({
+      isExecuting: false,
+      stepType: data.stepType,
+      actorId: data.actorId ?? null,
+      actorName: null,
+      error: data.error,
+    });
+  }, []);
+
+  const handleStepCleanedUp = useCallback(() => {
+    // Clear the error state when step is cleaned up for retry
+    setStepExecution(prev => ({
+      ...prev,
+      error: null,
+    }));
+  }, []);
+
+  // Connect to SSE for real-time updates
+  const { isConnected } = useArenaEvents({
+    onStepStarted: handleStepStarted,
+    onStepCompleted: handleStepCompleted,
+    onStepFailed: handleStepFailed,
+    onStepCleanedUp: handleStepCleanedUp,
+  });
 
   // Fetch current game state
   const { data: stateData, isLoading: stateLoading } = useQuery({
@@ -59,7 +127,10 @@ export function GamePage() {
             Monitor and control the AI Arena game
           </p>
         </div>
-        <ModeIndicator isManual={isManualMode} />
+        <div className="flex items-center gap-3">
+          <ConnectionIndicator isConnected={isConnected} />
+          <ModeIndicator isManual={isManualMode} />
+        </div>
       </div>
 
       {/* Main Grid */}
@@ -68,15 +139,36 @@ export function GamePage() {
         <div className="lg:col-span-2 space-y-6">
           <SessionCard state={state} />
           <RoundCard state={state} />
-          <NextStepCard state={state} isManual={isManualMode} />
+          <NextStepCard
+            state={state}
+            isManual={isManualMode}
+            stepExecution={stepExecution}
+            onClearError={() => setStepExecution(prev => ({ ...prev, error: null }))}
+          />
         </div>
 
         {/* Right Column - Models & Controls */}
         <div className="space-y-6">
-          <SessionControlsCard state={state} />
+          <SessionControlsCard state={state} stepExecution={stepExecution} />
           <ModelsCard state={state} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// Connection indicator
+function ConnectionIndicator({ isConnected }: { isConnected: boolean }) {
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
+      isConnected
+        ? 'bg-green-500/20 text-green-400'
+        : 'bg-red-500/20 text-red-400'
+    }`}>
+      <div className={`w-1.5 h-1.5 rounded-full ${
+        isConnected ? 'bg-green-400' : 'bg-red-400 animate-pulse'
+      }`} />
+      {isConnected ? 'Live' : 'Disconnected'}
     </div>
   );
 }
@@ -320,10 +412,14 @@ function ModelStatusRow({
 // Next Step Preview Card with Trigger Button
 function NextStepCard({
   state,
-  isManual
+  isManual,
+  stepExecution,
+  onClearError,
 }: {
   state: CurrentArenaState | null;
   isManual: boolean;
+  stepExecution: StepExecutionState;
+  onClearError: () => void;
 }) {
   const queryClient = useQueryClient();
 
@@ -342,33 +438,99 @@ function NextStepCard({
   });
 
   // Determine what happens next
-  const nextStep = getNextStepInfo(state);
+  const nextStep = getNextStepInfo(state, stepExecution);
   const canTrigger = state?.session &&
     state.session.status !== 'completed' &&
     state.session.status !== 'failed' &&
-    state.session.status !== 'paused';
+    state.session.status !== 'paused' &&
+    !stepExecution.isExecuting; // Can't trigger while step is executing
 
-  // Can redo if there's an active round (which means steps exist)
-  const canRedo = state?.currentRound && isManual;
+  // Can undo if there's an active round AND not currently executing
+  const canUndo = state?.currentRound && isManual && !stepExecution.isExecuting;
+
+  // Any operation in progress (mutations or step execution)
+  const isOperationInProgress = triggerMutation.isPending || undoMutation.isPending || stepExecution.isExecuting;
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 border-2 border-blue-500/30">
+    <div className={`bg-gray-800 rounded-lg p-6 border-2 ${
+      stepExecution.error
+        ? 'border-red-500/50'
+        : stepExecution.isExecuting
+          ? 'border-yellow-500/50'
+          : 'border-blue-500/30'
+    }`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Zap size={20} className="text-blue-400" />
-          Next Step
+          <Zap size={20} className={
+            stepExecution.error
+              ? 'text-red-400'
+              : stepExecution.isExecuting
+                ? 'text-yellow-400'
+                : 'text-blue-400'
+          } />
+          {stepExecution.isExecuting ? 'Step In Progress' : stepExecution.error ? 'Step Failed' : 'Next Step'}
         </h2>
-        {isManual && (
+        {isManual && !stepExecution.isExecuting && (
           <span className="text-xs text-gray-500">Manual mode enabled</span>
         )}
       </div>
 
-      {/* Next step description */}
-      <div className="bg-gray-900 rounded-lg p-4 mb-4">
-        <div className="text-sm text-gray-400 mb-1">What happens next:</div>
-        <div className="font-medium text-white">{nextStep.title}</div>
-        <div className="text-sm text-gray-500 mt-1">{nextStep.description}</div>
-      </div>
+      {/* Current execution status */}
+      {stepExecution.isExecuting && (
+        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <RefreshCw className="animate-spin text-yellow-400" size={20} />
+            <div>
+              <div className="font-medium text-yellow-200">
+                {getStepTypeLabel(stepExecution.stepType)}
+              </div>
+              {stepExecution.actorName && (
+                <div className="text-sm text-yellow-400/70">
+                  {stepExecution.actorName} is working...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error status */}
+      {stepExecution.error && !stepExecution.isExecuting && (
+        <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <XCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
+            <div className="flex-1">
+              <div className="font-medium text-red-200">
+                {getStepTypeLabel(stepExecution.stepType)} Failed
+              </div>
+              <div className="text-sm text-red-400/70 mt-1">
+                {stepExecution.error}
+              </div>
+              <div className="text-xs text-gray-500 mt-2">
+                Click "Execute Next Step" to retry, or "Step Back" to undo and try a different approach.
+              </div>
+            </div>
+            <button
+              onClick={onClearError}
+              className="text-gray-500 hover:text-gray-300 p-1"
+              title="Dismiss error"
+            >
+              <XCircle size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Next step description - only show when not executing */}
+      {!stepExecution.isExecuting && (
+        <div className="bg-gray-900 rounded-lg p-4 mb-4">
+          <div className="text-sm text-gray-400 mb-1">
+            {stepExecution.error ? 'Retry action:' : 'What happens next:'}
+          </div>
+          <div className="font-medium text-white">{nextStep.title}</div>
+          <div className="text-sm text-gray-500 mt-1">{nextStep.description}</div>
+        </div>
+      )}
 
       {/* Manual mode buttons */}
       {isManual && (
@@ -376,7 +538,7 @@ function NextStepCard({
           {/* Step Back Button */}
           <button
             onClick={() => undoMutation.mutate()}
-            disabled={undoMutation.isPending || !canRedo}
+            disabled={isOperationInProgress || !canUndo}
             className="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-700
                        disabled:text-gray-500 rounded-lg font-medium transition-colors
                        flex items-center justify-center gap-2"
@@ -398,15 +560,28 @@ function NextStepCard({
           {/* Execute Button */}
           <button
             onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending || !canTrigger}
-            className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700
-                       disabled:text-gray-500 rounded-lg font-medium transition-colors
-                       flex items-center justify-center gap-2"
+            disabled={isOperationInProgress || !canTrigger}
+            className={`flex-1 py-3 px-4 ${
+              stepExecution.error
+                ? 'bg-orange-600 hover:bg-orange-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            } disabled:bg-gray-700 disabled:text-gray-500 rounded-lg font-medium transition-colors
+                       flex items-center justify-center gap-2`}
           >
             {triggerMutation.isPending ? (
               <>
                 <RefreshCw className="animate-spin" size={18} />
+                Starting...
+              </>
+            ) : stepExecution.isExecuting ? (
+              <>
+                <RefreshCw className="animate-spin" size={18} />
                 Executing...
+              </>
+            ) : stepExecution.error ? (
+              <>
+                <RotateCw size={18} />
+                Retry Step
               </>
             ) : (
               <>
@@ -424,7 +599,7 @@ function NextStepCard({
         </div>
       )}
 
-      {/* Error messages */}
+      {/* Mutation error messages (different from step execution errors) */}
       {(triggerMutation.isError || undoMutation.isError) && (
         <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-400">
           {((triggerMutation.error || undoMutation.error) as Error).message}
@@ -434,8 +609,32 @@ function NextStepCard({
   );
 }
 
+// Get human-readable step type label
+function getStepTypeLabel(stepType: StepType | null): string {
+  if (!stepType) return 'Unknown Step';
+  const labels: Record<StepType, string> = {
+    master_topic: 'Master Selecting Topic',
+    master_question: 'Master Creating Question',
+    model_answer: 'Model Answering',
+    model_judge: 'Model Judging',
+    scoring: 'Calculating Scores',
+  };
+  return labels[stepType] ?? stepType;
+}
+
 // Determine next step information
-function getNextStepInfo(state: CurrentArenaState | null): { title: string; description: string } {
+function getNextStepInfo(
+  state: CurrentArenaState | null,
+  stepExecution?: StepExecutionState
+): { title: string; description: string } {
+  // If there's a failed step, show retry info
+  if (stepExecution?.error && stepExecution.stepType) {
+    return {
+      title: `Retry: ${getStepTypeLabel(stepExecution.stepType)}`,
+      description: 'The previous attempt failed. Click to retry the same step.',
+    };
+  }
+
   if (!state?.session) {
     return {
       title: 'Create Session',
@@ -536,7 +735,13 @@ function getNextStepInfo(state: CurrentArenaState | null): { title: string; desc
 }
 
 // Session Controls Card
-function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
+function SessionControlsCard({
+  state,
+  stepExecution,
+}: {
+  state: CurrentArenaState | null;
+  stepExecution: StepExecutionState;
+}) {
   const queryClient = useQueryClient();
   const { data: configData } = useQuery({
     queryKey: ['config'],
@@ -586,6 +791,12 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
   // Can restart if there's an active session (not completed/failed)
   const canRestart = session && session.status !== 'completed' && session.status !== 'failed';
 
+  // Disable all controls during step execution
+  const isStepInProgress = stepExecution.isExecuting;
+  const anyMutationPending = createSessionMutation.isPending || pauseMutation.isPending ||
+    startMutation.isPending || restartMutation.isPending;
+  const isDisabled = isStepInProgress || anyMutationPending;
+
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -593,12 +804,19 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
         Session Controls
       </h2>
 
+      {/* Warning when step is in progress */}
+      {isStepInProgress && (
+        <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-400">
+          Controls disabled while step is executing
+        </div>
+      )}
+
       <div className="space-y-3">
         {/* Create New Session - only when no active session */}
         {canCreate && (
           <button
             onClick={() => createSessionMutation.mutate()}
-            disabled={createSessionMutation.isPending}
+            disabled={isDisabled}
             className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-700
                        disabled:text-gray-500 rounded-lg font-medium transition-colors
                        flex items-center justify-center gap-2"
@@ -616,7 +834,7 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
         {canRestart && (
           <button
             onClick={() => restartMutation.mutate()}
-            disabled={restartMutation.isPending}
+            disabled={isDisabled}
             className="w-full py-2 px-4 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700
                        disabled:text-gray-500 rounded-lg font-medium transition-colors
                        flex items-center justify-center gap-2"
@@ -633,7 +851,7 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
         {/* Pause Button */}
         <button
           onClick={() => pauseMutation.mutate()}
-          disabled={!canPause || pauseMutation.isPending}
+          disabled={!canPause || isDisabled}
           className="w-full py-2 px-4 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-700
                      disabled:text-gray-500 rounded-lg font-medium transition-colors
                      flex items-center justify-center gap-2"
@@ -649,7 +867,7 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
         {/* Resume Button */}
         <button
           onClick={() => startMutation.mutate()}
-          disabled={!canResume || startMutation.isPending}
+          disabled={!canResume || isDisabled}
           className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700
                      disabled:text-gray-500 rounded-lg font-medium transition-colors
                      flex items-center justify-center gap-2"

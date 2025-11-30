@@ -856,7 +856,11 @@ export class GameEngine extends EventEmitter {
 
       return this.mapStepToInfo(step!);
     } catch (error) {
-      await this.failStep(stepId, (error as Error).message);
+      await this.failStep(stepId, (error as Error).message, {
+        roundId: round.id,
+        stepType: 'master_topic',
+        actorModelId: round.masterId,
+      });
       throw error;
     }
   }
@@ -956,7 +960,11 @@ export class GameEngine extends EventEmitter {
 
       return this.mapStepToInfo(step!);
     } catch (error) {
-      await this.failStep(stepId, (error as Error).message);
+      await this.failStep(stepId, (error as Error).message, {
+        roundId: round.id,
+        stepType: 'master_question',
+        actorModelId: round.masterId,
+      });
       throw error;
     }
   }
@@ -1075,7 +1083,11 @@ export class GameEngine extends EventEmitter {
 
       return this.mapStepToInfo(step!);
     } catch (error) {
-      await this.failStep(stepId, (error as Error).message);
+      await this.failStep(stepId, (error as Error).message, {
+        roundId: round.id,
+        stepType: 'model_answer',
+        actorModelId: nextModelId,
+      });
       throw error;
     }
   }
@@ -1233,7 +1245,11 @@ export class GameEngine extends EventEmitter {
 
       return this.mapStepToInfo(step!);
     } catch (error) {
-      await this.failStep(stepId, (error as Error).message);
+      await this.failStep(stepId, (error as Error).message, {
+        roundId: round.id,
+        stepType: 'model_judge',
+        actorModelId: nextJudgeId,
+      });
       throw error;
     }
   }
@@ -1305,7 +1321,11 @@ export class GameEngine extends EventEmitter {
 
       return this.mapStepToInfo(step!);
     } catch (error) {
-      await this.failStep(stepId, (error as Error).message);
+      await this.failStep(stepId, (error as Error).message, {
+        roundId: round.id,
+        stepType: 'scoring',
+        actorModelId: null,
+      });
       throw error;
     }
   }
@@ -1624,7 +1644,16 @@ export class GameEngine extends EventEmitter {
       .where(eq(schema.rounds.id, roundId));
   }
 
-  private async failStep(stepId: string, errorMessage: string): Promise<void> {
+  private async failStep(
+    stepId: string,
+    errorMessage: string,
+    context: {
+      roundId: string;
+      stepType: StepType;
+      actorModelId?: string | null;
+      actorModelName?: string;
+    }
+  ): Promise<void> {
     await db
       .update(schema.roundSteps)
       .set({
@@ -1633,6 +1662,24 @@ export class GameEngine extends EventEmitter {
         completedAt: new Date(),
       })
       .where(eq(schema.roundSteps.id, stepId));
+
+    // Emit step_failed event so frontend can reset UI state
+    this.emitEvent('step_failed', {
+      stepId,
+      roundId: context.roundId,
+      stepType: context.stepType,
+      actorId: context.actorModelId,
+      actorName: context.actorModelName,
+      error: errorMessage,
+    });
+
+    logger.warn({
+      stepId,
+      roundId: context.roundId,
+      stepType: context.stepType,
+      actorModelId: context.actorModelId,
+      error: errorMessage,
+    }, 'Step failed');
   }
 
   private async failSession(sessionId: string, errorMessage: string): Promise<void> {

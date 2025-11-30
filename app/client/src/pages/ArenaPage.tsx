@@ -23,6 +23,8 @@ import type {
   RoundStartedEvent,
   StepStartedEvent,
   StepCompletedEvent,
+  StepFailedEvent,
+  StepCleanedUpEvent,
   StepUndoneEvent,
   RoundCompletedEvent,
 } from '@sabe/shared';
@@ -77,12 +79,21 @@ function getClockwiseOrderFromMaster(
 // Helper: Determine next actor ID
 // During answering: models answer in clockwise order starting from the model AFTER the master
 // During judging: responders first in answer order, master LAST
+// IMPORTANT: Returns null if any model is currently "thinking" or "judging" - don't show "next" during active steps
 function getNextActorId(
   models: ArenaDisplayState['models'],
   masterId: string | null,
-  roundStatus: string | null
+  roundStatus: string | null,
+  currentActorId: string | null
 ): string | null {
   if (!roundStatus) return null;
+
+  // Don't show "next" indicator while someone is actively thinking/judging
+  // This prevents confusing UI states during step execution
+  const isAnyModelActive = models.some(m => m.status === 'thinking' || m.status === 'judging');
+  if (isAnyModelActive || currentActorId) {
+    return null;
+  }
 
   if (roundStatus === 'question_creation' || roundStatus === 'answering') {
     // Get models in clockwise order starting from the model AFTER the master
@@ -164,7 +175,7 @@ export function ArenaPage() {
       questionContent: data.currentRound?.questionContent ?? null,
       currentStepType: data.currentStep?.stepType ?? null,
       currentActorId: data.currentStep?.actorModelId ?? null,
-      nextActorId: getNextActorId(models, masterId, roundStatus),
+      nextActorId: getNextActorId(models, masterId, roundStatus, data.currentStep?.actorModelId ?? null),
       models,
       answerPreviews: {},
     });
@@ -229,6 +240,7 @@ export function ArenaPage() {
         answerPreview: isTransitioningToJudging ? undefined : m.answerPreview,
       }));
 
+      // currentActorId is set, so nextActorId will be null (don't show "next" during active step)
       return {
         ...prev,
         currentStepType: data.stepType,
@@ -237,7 +249,7 @@ export function ArenaPage() {
         models,
         // Clear answer previews when entering judging phase
         answerPreviews: isTransitioningToJudging ? {} : prev.answerPreviews,
-        nextActorId: getNextActorId(models, prev.masterId, roundStatus),
+        nextActorId: getNextActorId(models, prev.masterId, roundStatus, data.actorId ?? null),
       };
     });
 
@@ -284,10 +296,12 @@ export function ArenaPage() {
         return { ...m, status: 'idle' as const, answerPreview };
       });
 
+      // Step completed, so currentActorId is null - can show "next" indicator now
       updatedState.nextActorId = getNextActorId(
         updatedState.models,
         updatedState.masterId,
-        updatedState.roundStatus
+        updatedState.roundStatus,
+        null // No active actor after step completes
       );
 
       return updatedState;
@@ -342,16 +356,70 @@ export function ArenaPage() {
         updatedState.models = prev.models.map((m) => ({ ...m, status: 'idle' as const }));
       }
 
+      // Step undone, no active actor - can show "next" indicator
       updatedState.nextActorId = getNextActorId(
         updatedState.models,
         updatedState.masterId,
-        updatedState.roundStatus
+        updatedState.roundStatus,
+        null // No active actor after undo
       );
 
       return updatedState;
     });
 
     addActivity({ type: 'info', message: 'Step reverted' });
+  }, [addActivity]);
+
+  // Handle step failed - reset the model that was thinking/judging back to idle
+  const handleStepFailed = useCallback((data: StepFailedEvent) => {
+    setArenaState((prev) => {
+      if (!prev) return null;
+
+      // Reset the actor model back to idle status
+      const models = prev.models.map((m) => {
+        if (m.id === data.actorId) {
+          return { ...m, status: 'idle' as const };
+        }
+        return m;
+      });
+
+      // Step failed, clear current actor - can show "next" indicator
+      return {
+        ...prev,
+        currentStepType: null,
+        currentActorId: null,
+        models,
+        nextActorId: getNextActorId(models, prev.masterId, prev.roundStatus, null),
+      };
+    });
+
+    addActivity({ type: 'error', message: `Step failed: ${data.error}` });
+  }, [addActivity]);
+
+  // Handle step cleaned up - reset the model that was cleaned up back to idle
+  const handleStepCleanedUp = useCallback((data: StepCleanedUpEvent) => {
+    setArenaState((prev) => {
+      if (!prev) return null;
+
+      // Reset the actor model back to idle status
+      const models = prev.models.map((m) => {
+        if (m.id === data.actorModelId) {
+          return { ...m, status: 'idle' as const };
+        }
+        return m;
+      });
+
+      // Step cleaned up, clear current actor - can show "next" indicator
+      return {
+        ...prev,
+        currentStepType: null,
+        currentActorId: null,
+        models,
+        nextActorId: getNextActorId(models, prev.masterId, prev.roundStatus, null),
+      };
+    });
+
+    addActivity({ type: 'info', message: 'Retrying step...' });
   }, [addActivity]);
 
   // Handle round completed
@@ -401,6 +469,8 @@ export function ArenaPage() {
     onRoundStarted: handleRoundStarted,
     onStepStarted: handleStepStarted,
     onStepCompleted: handleStepCompleted,
+    onStepFailed: handleStepFailed,
+    onStepCleanedUp: handleStepCleanedUp,
     onStepUndone: handleStepUndone,
     onRoundCompleted: handleRoundCompleted,
   });

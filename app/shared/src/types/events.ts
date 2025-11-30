@@ -27,6 +27,8 @@ export type ArenaEventType =
   | 'round:completed'
   | 'step:started'
   | 'step:completed'
+  | 'step:failed'
+  | 'step:cleaned_up'
   | 'step:undone';
 
 // =============================================================================
@@ -186,6 +188,33 @@ export interface StepCompletedEvent extends BaseArenaEvent {
 }
 
 // =============================================================================
+// STEP FAILED EVENT (when step execution fails after retries)
+// =============================================================================
+
+export interface StepFailedEvent extends BaseArenaEvent {
+  type: 'step:failed';
+  stepId: string;
+  roundId: string;
+  stepType: StepType;
+  actorId?: string;
+  actorName?: string;
+  error: string;
+}
+
+// =============================================================================
+// STEP CLEANED UP EVENT (when failed/running step is deleted for retry)
+// =============================================================================
+
+export interface StepCleanedUpEvent extends BaseArenaEvent {
+  type: 'step:cleaned_up';
+  stepId: string;
+  roundId: string;
+  stepType: StepType;
+  actorModelId?: string;
+  previousStatus: StepStatus;
+}
+
+// =============================================================================
 // STEP UNDONE EVENT (for step back functionality)
 // =============================================================================
 
@@ -220,4 +249,6 @@ export type ArenaEvent =
   | RoundCompletedEvent
   | StepStartedEvent
   | StepCompletedEvent
+  | StepFailedEvent
+  | StepCleanedUpEvent
   | StepUndoneEvent;

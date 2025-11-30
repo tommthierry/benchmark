@@ -11,6 +11,8 @@ import type {
   RoundCompletedEvent,
   StepStartedEvent,
   StepCompletedEvent,
+  StepFailedEvent,
+  StepCleanedUpEvent,
   StepUndoneEvent,
   SessionCompletedEvent,
 } from '@sabe/shared';
@@ -34,6 +36,12 @@ export interface UseArenaEventsOptions {
 
   /** Called when a step completes */
   onStepCompleted?: (data: StepCompletedEvent) => void;
+
+  /** Called when a step fails after all retries */
+  onStepFailed?: (data: StepFailedEvent) => void;
+
+  /** Called when a failed/running step is cleaned up for retry */
+  onStepCleanedUp?: (data: StepCleanedUpEvent) => void;
 
   /** Called when a step is undone (step back) */
   onStepUndone?: (data: StepUndoneEvent) => void;
@@ -119,6 +127,8 @@ export function useArenaEvents(
 
       case 'step:started':
       case 'step:completed':
+      case 'step:failed':
+      case 'step:cleaned_up':
       case 'step:undone':
         queryClient.invalidateQueries({ queryKey: ['arena', 'current'] });
         break;
@@ -221,6 +231,12 @@ export function useArenaEvents(
     });
     addEventHandler<StepCompletedEvent>('step:completed', (data) => {
       callbacksRef.current.onStepCompleted?.(data);
+    });
+    addEventHandler<StepFailedEvent>('step:failed', (data) => {
+      callbacksRef.current.onStepFailed?.(data);
+    });
+    addEventHandler<StepCleanedUpEvent>('step:cleaned_up', (data) => {
+      callbacksRef.current.onStepCleanedUp?.(data);
     });
     addEventHandler<StepUndoneEvent>('step:undone', (data) => {
       callbacksRef.current.onStepUndone?.(data);
