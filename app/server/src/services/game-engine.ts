@@ -274,6 +274,256 @@ export class GameEngine extends EventEmitter {
   }
 
   /**
+   * Force-end a session (mark as completed regardless of progress)
+   * Used when restarting a new game
+   */
+  async endSession(sessionId: string): Promise<void> {
+    const [session] = await db
+      .select()
+      .from(schema.gameSessions)
+      .where(eq(schema.gameSessions.id, sessionId));
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // Stop if this is the active session
+    if (this.activeSessionId === sessionId) {
+      this.activeSessionId = null;
+      this.isPaused = true;
+    }
+
+    // Mark session as completed
+    await db
+      .update(schema.gameSessions)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+      })
+      .where(eq(schema.gameSessions.id, sessionId));
+
+    // Also mark current round as completed if there is one
+    if (session.currentRoundId) {
+      await db
+        .update(schema.rounds)
+        .set({
+          status: 'completed',
+          completedAt: new Date(),
+        })
+        .where(eq(schema.rounds.id, session.currentRoundId));
+    }
+
+    this.emitEvent('session_ended', { sessionId });
+    logger.info({ sessionId }, 'Game session force-ended');
+  }
+
+  /**
+   * Step back - completely erase the last step as if it never happened.
+   * This fully reverts DB state, round fields, and emits an event for UI sync.
+   */
+  async undoLastStep(sessionId?: string): Promise<{
+    deletedStep: StepInfo | null;
+    newRoundStatus: RoundStatus | null;
+    clearedFields: { topicId?: boolean; questionContent?: boolean };
+  }> {
+    // Get session
+    let session;
+    if (sessionId) {
+      [session] = await db
+        .select()
+        .from(schema.gameSessions)
+        .where(eq(schema.gameSessions.id, sessionId));
+    } else {
+      [session] = await db
+        .select()
+        .from(schema.gameSessions)
+        .where(inArray(schema.gameSessions.status, ['created', 'running', 'paused']))
+        .orderBy(desc(schema.gameSessions.createdAt))
+        .limit(1);
+    }
+
+    if (!session) {
+      throw new Error('No active session found');
+    }
+
+    if (!session.currentRoundId) {
+      throw new Error('No active round to undo step in');
+    }
+
+    // Get the last step in current round (any status - completed, failed, running)
+    const [lastStep] = await db
+      .select()
+      .from(schema.roundSteps)
+      .where(eq(schema.roundSteps.roundId, session.currentRoundId))
+      .orderBy(desc(schema.roundSteps.stepNumber))
+      .limit(1);
+
+    if (!lastStep) {
+      throw new Error('No steps to undo');
+    }
+
+    // Track which round fields need to be cleared
+    const clearedFields: { topicId?: boolean; questionContent?: boolean } = {};
+
+    // Delete associated judgments if this was a judge step
+    if (lastStep.stepType === 'model_judge' && lastStep.actorModelId) {
+      await db
+        .delete(schema.modelJudgments)
+        .where(
+          and(
+            eq(schema.modelJudgments.roundId, session.currentRoundId),
+            eq(schema.modelJudgments.judgeModelId, lastStep.actorModelId)
+          )
+        );
+    }
+
+    // Delete the step
+    await db
+      .delete(schema.roundSteps)
+      .where(eq(schema.roundSteps.id, lastStep.id));
+
+    // Determine new round status and what fields to clear
+    const { newStatus, roundUpdates } = await this.calculateUndoState(
+      session.currentRoundId,
+      session.id,
+      lastStep.stepType
+    );
+
+    // Apply round updates
+    await db
+      .update(schema.rounds)
+      .set({ status: newStatus, ...roundUpdates })
+      .where(eq(schema.rounds.id, session.currentRoundId));
+
+    // Track cleared fields for the event
+    if (roundUpdates.topicId === null) clearedFields.topicId = true;
+    if (roundUpdates.questionContent === null) clearedFields.questionContent = true;
+
+    logger.info({
+      sessionId: session.id,
+      roundId: session.currentRoundId,
+      deletedStepId: lastStep.id,
+      deletedStepType: lastStep.stepType,
+      deletedActorId: lastStep.actorModelId,
+      newStatus,
+      clearedFields,
+    }, 'Step undone (erased)');
+
+    // Emit event for SSE broadcast
+    this.emitEvent('step_undone', {
+      sessionId: session.id,
+      roundId: session.currentRoundId,
+      deletedStepType: lastStep.stepType,
+      deletedActorId: lastStep.actorModelId,
+      newRoundStatus: newStatus,
+      clearedFields,
+    });
+
+    return {
+      deletedStep: this.mapStepToInfo(lastStep),
+      newRoundStatus: newStatus,
+      clearedFields,
+    };
+  }
+
+  /**
+   * Calculate the new round state after undoing a step.
+   * Returns the new status and any round fields that need to be cleared.
+   */
+  private async calculateUndoState(
+    roundId: string,
+    sessionId: string,
+    deletedStepType: StepType
+  ): Promise<{
+    newStatus: RoundStatus;
+    roundUpdates: Partial<{
+      topicId: string | null;
+      questionContent: string | null;
+      questionDifficulty: 'easy' | 'medium' | 'hard' | 'expert' | null;
+    }>;
+  }> {
+    // Get remaining completed steps after deletion
+    const remainingSteps = await db
+      .select()
+      .from(schema.roundSteps)
+      .where(
+        and(
+          eq(schema.roundSteps.roundId, roundId),
+          eq(schema.roundSteps.status, 'completed')
+        )
+      )
+      .orderBy(desc(schema.roundSteps.stepNumber));
+
+    const roundUpdates: Partial<{
+      topicId: string | null;
+      questionContent: string | null;
+      questionDifficulty: 'easy' | 'medium' | 'hard' | 'expert' | null;
+    }> = {};
+
+    // If no completed steps remain, reset to 'created'
+    if (remainingSteps.length === 0) {
+      // Clear all round data fields based on what step we deleted
+      if (deletedStepType === 'master_topic') {
+        roundUpdates.topicId = null;
+      }
+      if (deletedStepType === 'master_question' || deletedStepType === 'master_topic') {
+        roundUpdates.questionContent = null;
+        roundUpdates.questionDifficulty = null;
+      }
+      return { newStatus: 'created', roundUpdates };
+    }
+
+    // Find the last remaining completed step
+    const lastCompletedStep = remainingSteps[0];
+
+    // Determine what fields to clear based on what was deleted
+    if (deletedStepType === 'master_question') {
+      // Reverting question creation - clear question but keep topic
+      roundUpdates.questionContent = null;
+      roundUpdates.questionDifficulty = null;
+    } else if (deletedStepType === 'master_topic') {
+      // Reverting topic selection - clear everything
+      roundUpdates.topicId = null;
+      roundUpdates.questionContent = null;
+      roundUpdates.questionDifficulty = null;
+    }
+
+    // Calculate new status based on remaining steps
+    switch (lastCompletedStep.stepType) {
+      case 'master_topic':
+        return { newStatus: 'topic_selection', roundUpdates };
+
+      case 'master_question':
+        return { newStatus: 'question_creation', roundUpdates };
+
+      case 'model_answer': {
+        // Check if all non-master models have answered
+        const [session] = await db
+          .select()
+          .from(schema.gameSessions)
+          .where(eq(schema.gameSessions.id, sessionId));
+
+        const respondingCount = session.participatingModelIds.length - 1;
+        const answerCount = remainingSteps.filter(s => s.stepType === 'model_answer').length;
+
+        return {
+          newStatus: answerCount >= respondingCount ? 'judging' : 'answering',
+          roundUpdates,
+        };
+      }
+
+      case 'model_judge':
+        return { newStatus: 'judging', roundUpdates };
+
+      case 'scoring':
+        return { newStatus: 'completed', roundUpdates };
+
+      default:
+        return { newStatus: 'created', roundUpdates };
+    }
+  }
+
+  /**
    * Get current game state for display
    */
   async getCurrentState(): Promise<CurrentArenaState | null> {
@@ -450,6 +700,7 @@ export class GameEngine extends EventEmitter {
 
   /**
    * Execute the next step in a round
+   * First checks for any failed/running steps and cleans them up for retry
    */
   private async executeRoundStep(
     roundId: string,
@@ -459,6 +710,9 @@ export class GameEngine extends EventEmitter {
     if (!round) {
       throw new Error('Round not found');
     }
+
+    // Check for any failed or stuck running steps - clean them up for retry
+    await this.cleanupIncompleteSteps(roundId);
 
     // Determine which step to execute based on round status
     switch (round.status) {
@@ -552,11 +806,13 @@ export class GameEngine extends EventEmitter {
       });
 
       const startTime = Date.now();
-      const response = await providerManager.sendPrompt(
-        master.providerId,
-        master.providerModelId,
-        prompt,
-        { temperature: 0.7, maxTokens: 300 }
+      const response = await this.executeWithRetry(() =>
+        providerManager.sendPrompt(
+          master.providerId,
+          master.providerModelId,
+          prompt,
+          { temperature: 0.7, maxTokens: 300 }
+        )
       );
       const responseTimeMs = Date.now() - startTime;
 
@@ -656,11 +912,13 @@ export class GameEngine extends EventEmitter {
       });
 
       const startTime = Date.now();
-      const response = await providerManager.sendPrompt(
-        master.providerId,
-        master.providerModelId,
-        prompt,
-        { temperature: 0.8, maxTokens: 500 }
+      const response = await this.executeWithRetry(() =>
+        providerManager.sendPrompt(
+          master.providerId,
+          master.providerModelId,
+          prompt,
+          { temperature: 0.8, maxTokens: 500 }
+        )
       );
       const responseTimeMs = Date.now() - startTime;
 
@@ -705,13 +963,17 @@ export class GameEngine extends EventEmitter {
 
   /**
    * Execute answering step (one model at a time)
+   * Order: Start from the model immediately after the master (clockwise)
    */
   private async executeAnsweringStep(
     round: schema.Round,
     modelIds: string[]
   ): Promise<StepInfo> {
     // Find next model that hasn't answered
-    const respondingModels = modelIds.filter(id => id !== round.masterId);
+    // Order should start from the model AFTER the master in clockwise order
+    const masterIndex = modelIds.indexOf(round.masterId);
+    const respondingModels = this.getClockwiseOrder(modelIds, masterIndex)
+      .filter(id => id !== round.masterId);
 
     const existingAnswers = await db
       .select()
@@ -774,11 +1036,13 @@ export class GameEngine extends EventEmitter {
       });
 
       const startTime = Date.now();
-      const response = await providerManager.sendPrompt(
-        model.providerId,
-        model.providerModelId,
-        prompt,
-        { temperature: 0.7, maxTokens: 1000 }
+      const response = await this.executeWithRetry(() =>
+        providerManager.sendPrompt(
+          model.providerId,
+          model.providerModelId,
+          prompt,
+          { temperature: 0.7, maxTokens: 1000 }
+        )
       );
       const responseTimeMs = Date.now() - startTime;
 
@@ -818,6 +1082,8 @@ export class GameEngine extends EventEmitter {
 
   /**
    * Execute judging step (one judge at a time)
+   * Order: First answerer → other responders in answer order → Master LAST
+   * This ensures the master can break ties with authoritative ranking
    */
   private async executeJudgingStep(
     round: schema.Round,
@@ -834,14 +1100,8 @@ export class GameEngine extends EventEmitter {
       );
 
     const judgedModelIds = new Set(existingJudgments.map(j => j.actorModelId));
-    const nextJudgeId = modelIds.find(id => !judgedModelIds.has(id));
 
-    if (!nextJudgeId) {
-      // All models have judged, move to scoring
-      return this.executeScoringStep(round);
-    }
-
-    const stepId = uuid();
+    // Get answer steps ordered by stepNumber to determine judging order
     const answerSteps = await db
       .select()
       .from(schema.roundSteps)
@@ -851,7 +1111,22 @@ export class GameEngine extends EventEmitter {
           eq(schema.roundSteps.stepType, 'model_answer'),
           eq(schema.roundSteps.status, 'completed')
         )
-      );
+      )
+      .orderBy(schema.roundSteps.stepNumber);
+
+    // Build judging order: answerers in answer order, then master LAST
+    const answererIds = answerSteps.map(s => s.actorModelId!);
+    const judgingOrder = [...answererIds, round.masterId];
+
+    // Find next judge who hasn't judged yet
+    const nextJudgeId = judgingOrder.find(id => !judgedModelIds.has(id));
+
+    if (!nextJudgeId) {
+      // All models have judged, move to scoring
+      return this.executeScoringStep(round);
+    }
+
+    const stepId = uuid();
 
     const stepNumber = 3 + answerSteps.length + existingJudgments.length;
     const now = new Date();
@@ -898,11 +1173,13 @@ export class GameEngine extends EventEmitter {
       });
 
       const startTime = Date.now();
-      const response = await providerManager.sendPrompt(
-        judge.providerId,
-        judge.providerModelId,
-        prompt,
-        { temperature: 0.3, maxTokens: 1500 }
+      const response = await this.executeWithRetry(() =>
+        providerManager.sendPrompt(
+          judge.providerId,
+          judge.providerModelId,
+          prompt,
+          { temperature: 0.3, maxTokens: 1500 }
+        )
       );
       const responseTimeMs = Date.now() - startTime;
 
@@ -1103,6 +1380,80 @@ export class GameEngine extends EventEmitter {
   // ==========================================================================
   // HELPER METHODS
   // ==========================================================================
+
+  /**
+   * Clean up any incomplete (failed or running) steps before executing a new step.
+   * This ensures we retry failed steps rather than skipping them.
+   * - Failed steps: Delete them so the same action can be retried
+   * - Running steps: Mark as failed (stuck from previous crash/timeout)
+   */
+  private async cleanupIncompleteSteps(roundId: string): Promise<void> {
+    // Find any incomplete steps
+    const incompleteSteps = await db
+      .select()
+      .from(schema.roundSteps)
+      .where(
+        and(
+          eq(schema.roundSteps.roundId, roundId),
+          inArray(schema.roundSteps.status, ['failed', 'running'])
+        )
+      );
+
+    if (incompleteSteps.length === 0) {
+      return;
+    }
+
+    for (const step of incompleteSteps) {
+      logger.info({
+        stepId: step.id,
+        stepType: step.stepType,
+        status: step.status,
+        actorModelId: step.actorModelId,
+        roundId,
+      }, 'Cleaning up incomplete step for retry');
+
+      // Delete any judgments associated with this step (for judge steps)
+      if (step.stepType === 'model_judge' && step.actorModelId) {
+        await db
+          .delete(schema.modelJudgments)
+          .where(
+            and(
+              eq(schema.modelJudgments.roundId, roundId),
+              eq(schema.modelJudgments.judgeModelId, step.actorModelId)
+            )
+          );
+      }
+
+      // Delete the incomplete step
+      await db
+        .delete(schema.roundSteps)
+        .where(eq(schema.roundSteps.id, step.id));
+
+      // Emit event so UI knows about the cleanup
+      this.emitEvent('step_cleaned_up', {
+        stepId: step.id,
+        stepType: step.stepType,
+        actorModelId: step.actorModelId,
+        previousStatus: step.status,
+        roundId,
+      });
+    }
+  }
+
+  /**
+   * Get models in clockwise order starting from the position AFTER the given index.
+   * For example, if modelIds = [A, B, C, D] and startIndex = 1 (B is master),
+   * returns [C, D, A, B] - starting from the model after B.
+   */
+  private getClockwiseOrder(modelIds: string[], startIndex: number): string[] {
+    const result: string[] = [];
+    const len = modelIds.length;
+    // Start from the position AFTER startIndex
+    for (let i = 1; i <= len; i++) {
+      result.push(modelIds[(startIndex + i) % len]);
+    }
+    return result;
+  }
 
   private async getRound(roundId: string): Promise<schema.Round | null> {
     const [round] = await db
@@ -1323,6 +1674,63 @@ export class GameEngine extends EventEmitter {
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Execute an LLM call with retry logic
+   * Retries on transient errors (network, rate limit, timeout)
+   */
+  private async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelayMs: number = 1000
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+        const isRetryable = this.isRetryableError(lastError);
+
+        if (!isRetryable || attempt === maxRetries) {
+          throw lastError;
+        }
+
+        // Exponential backoff: 1s, 2s, 4s
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        logger.warn({
+          attempt: attempt + 1,
+          maxRetries,
+          delayMs,
+          error: lastError.message,
+        }, 'LLM call failed, retrying...');
+
+        await this.delay(delayMs);
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Check if error is retryable (transient network/service errors)
+   */
+  private isRetryableError(error: Error): boolean {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('timeout') ||
+      message.includes('rate limit') ||
+      message.includes('429') ||
+      message.includes('503') ||
+      message.includes('502') ||
+      message.includes('network') ||
+      message.includes('econnreset') ||
+      message.includes('econnrefused') ||
+      message.includes('socket hang up') ||
+      message.includes('fetch failed')
+    );
   }
 }
 

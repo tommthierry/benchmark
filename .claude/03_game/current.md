@@ -107,87 +107,12 @@ We really want to make things easy to read and not add non relevant things per f
 
 ----
 
-## Message from previous agent
+So, we accomplished it all but I think we made a mistake.
+When we go from asnwering to judging, the master still is like called even if it does nothing else then creating the question.
+The windows like bubble need to be reset and we go to the next phase, the master is not called and one by one each llm will judge one by one and process this answering with a ranking json that can be compiled and save so that we use it for statistics
 
- MASTER_PLAN.md (5KB)
-
-  The high-level overview containing:
-  - Project goals and requirements
-  - Game flow recap (the step-by-step sequence you described)
-  - Phase breakdown with deliverables
-  - Technical decisions (state management, component library)
-  - Progress tracking methodology (⬜ → 🟡 → ✅)
-
-  PHASE_0_ADMIN_GAME_CONTROL.md (25KB)
-
-  Creates /admin/game page with:
-  - 10 detailed steps with code examples
-  - Session status card showing progress
-  - Current round card with master, topic, question
-  - Models grid with status indicators
-  - Next Step Preview - tells admin exactly what happens next
-  - Manual trigger button (when in manual mode)
-  - Session controls (new, pause, resume)
-  - Removes execution mode from /admin/settings
-
-  PHASE_1_ARENA_UI_ENHANCEMENTS.md (20KB)
-
-  Enhances /arena with:
-  - 8 detailed steps with code examples
-  - SpeechBubble component (CSS pseudo-elements, framer-motion)
-  - Answer preview bubbles (~15 words)
-  - "Next to answer" dashed ring indicator
-  - Enhanced thinking animation (rotating ring + typing dots)
-  - Improved empty state with animation
-  - State tracking for answer previews
-
-  PHASE_2_ROUND_COMPLETION_UX.md (17KB)
-
-  Adds round completion experience:
-  - 6 detailed steps with code examples
-  - RoundCompleteOverlay modal
-  - LeaderboardRow with staggered animations
-  - Winner highlight with confetti particles
-  - Question recap
-  - Auto-dismiss after 15 seconds
-  - Smooth transitions
-
-  Key Design Decisions
-
-  1. No backend changes needed - All required APIs already exist
-  2. CSS-first speech bubbles - Using pseudo-elements for the tail, keeping it simple
-  3. State in ArenaPage - Local React state for UI, TanStack Query for server data
-  4. Progress tracking per step - Each step can be checked off independently
-  5. Code examples included - Agents can copy/paste and adapt
-
-  Challenging Your Ideas
-
-  Based on my analysis, I refined a few things:
-
-  1. Master selection on round 1: You mentioned "random on first round, then clockwise". The current engine already
-  does (roundNumber - 1) % modelIds.length which is deterministic (first model in array is master for round 1). This
-   is simpler and more predictable - is that acceptable, or do you want true randomization for round 1?
-  2. Answer preview length: I went with ~60 characters / 15 words for speech bubbles. This fits well in the UI. Too
-  much text would clutter the circle layout.
-  3. Round completion overlay: Added auto-dismiss (15 seconds) so the game can continue automatically in cron mode.
-  The admin can also click "Continue" to dismiss immediately.
-  4. Execution mode in settings: You asked to remove it. I'm keeping the game settings (rounds per session, step
-  delay) but removing the manual/cron toggle from /admin/settings. The execution mode can still be changed via the
-  API.
-
-  Next Steps for Coding Agents
-
-  Agents should:
-  1. Read MASTER_PLAN.md first
-  2. Start with PHASE_0_ADMIN_GAME_CONTROL.md
-  3. Follow each step in order
-  4. Mark steps as completed (✅) in the Progress Tracker
-  5. Verify checklist before moving to next phase
-
-  The plans are designed to be self-contained with all necessary context, so agents don't need to explore the full
-  codebase to understand what to do.
-
-
+Think about what this mean, verify things, don't assume how our real code is. Understand the full current situation and then create a comprehensive plan to accomplished this clean up.
+When we are in the second phase we should be able to click on an llm and open the ranking response and be able to switch in the modal from right/left to answer/ranking view.
 
 
 

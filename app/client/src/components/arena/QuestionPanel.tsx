@@ -2,7 +2,7 @@
 // Animated transitions when question changes
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, User } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { slideUp } from '../../styles/animations';
 import { Markdown } from '../Markdown';
 
@@ -10,9 +10,10 @@ interface QuestionPanelProps {
   question?: string | null;
   topic?: string;
   masterName?: string;
+  masterColor?: string;
 }
 
-export function QuestionPanel({ question, topic, masterName }: QuestionPanelProps) {
+export function QuestionPanel({ question, topic, masterName, masterColor }: QuestionPanelProps) {
   return (
     <div className="bg-[var(--color-bg-secondary)] rounded-lg p-5 border border-[var(--color-bg-tertiary)]">
       {/* Topic badge */}
@@ -53,10 +54,16 @@ export function QuestionPanel({ question, topic, masterName }: QuestionPanelProp
       {/* Master attribution */}
       {masterName && (
         <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[var(--color-bg-tertiary)]">
-          <User size={14} className="text-[var(--color-master)]" />
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: masterColor || 'var(--color-master)' }}
+          />
           <span className="text-xs text-[var(--color-text-muted)]">
             Question by{' '}
-            <span className="text-[var(--color-master)] font-medium">
+            <span
+              className="font-medium"
+              style={{ color: masterColor || 'var(--color-master)' }}
+            >
               {masterName}
             </span>
           </span>

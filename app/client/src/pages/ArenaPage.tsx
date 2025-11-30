@@ -1,7 +1,7 @@
 // Public Arena Page - Real-time AI competition view
-// Features: Speech bubbles, thinking animation, next-to-answer indicator
+// Redesigned with status bar, color-coded models, collapsible activity
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Wifi, WifiOff } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useArenaEvents } from '../hooks/useArenaEvents';
 import { useArenaActivity } from '../hooks/useArenaActivity';
 import { arenaApi } from '../lib/api';
 import { ArenaCircle } from '../components/arena/ArenaCircle';
+import { GameStatusBar } from '../components/arena/GameStatusBar';
 import { QuestionPanel } from '../components/arena/QuestionPanel';
 import { ActivityFeed } from '../components/arena/ActivityFeed';
 import { RoundProgress } from '../components/arena/RoundProgress';
@@ -16,11 +17,13 @@ import { ModelDetailModal } from '../components/arena/ModelDetailModal';
 import { RoundCompleteOverlay, type RoundScore } from '../components/arena/RoundCompleteOverlay';
 import { fadeIn } from '../styles/animations';
 import { getPreviewWords } from '../components/arena/SpeechBubble';
+import { getModelColorByIndex } from '../lib/modelColors';
 import type {
   StateSnapshotEvent,
   RoundStartedEvent,
   StepStartedEvent,
   StepCompletedEvent,
+  StepUndoneEvent,
   RoundCompletedEvent,
 } from '@sabe/shared';
 
@@ -51,7 +54,29 @@ interface ArenaDisplayState {
   answerPreviews: Record<string, string>;
 }
 
+// Helper: Get models in clockwise order starting from the position AFTER the master
+// This mirrors the backend getClockwiseOrder logic
+function getClockwiseOrderFromMaster(
+  models: ArenaDisplayState['models'],
+  masterId: string | null
+): ArenaDisplayState['models'] {
+  if (!masterId) return models;
+
+  const masterIndex = models.findIndex(m => m.id === masterId);
+  if (masterIndex === -1) return models;
+
+  const result: ArenaDisplayState['models'] = [];
+  const len = models.length;
+  // Start from the position AFTER masterIndex (clockwise)
+  for (let i = 1; i <= len; i++) {
+    result.push(models[(masterIndex + i) % len]);
+  }
+  return result;
+}
+
 // Helper: Determine next actor ID
+// During answering: models answer in clockwise order starting from the model AFTER the master
+// During judging: responders first in answer order, master LAST
 function getNextActorId(
   models: ArenaDisplayState['models'],
   masterId: string | null,
@@ -60,16 +85,32 @@ function getNextActorId(
   if (!roundStatus) return null;
 
   if (roundStatus === 'question_creation' || roundStatus === 'answering') {
-    // Next model to answer (non-master who hasn't answered)
-    const respondingModels = models.filter(m => m.id !== masterId);
+    // Get models in clockwise order starting from the model AFTER the master
+    const clockwiseOrder = getClockwiseOrderFromMaster(models, masterId);
+    // Filter out the master, then find the first model that hasn't answered
+    const respondingModels = clockwiseOrder.filter(m => m.id !== masterId);
     const next = respondingModels.find(m => !m.hasAnswered);
     return next?.id ?? null;
   }
 
   if (roundStatus === 'judging') {
-    // Next model to judge
-    const next = models.find(m => !m.hasJudged);
-    return next?.id ?? null;
+    // During judging: responders judge first (in clockwise order), master LAST
+    const clockwiseOrder = getClockwiseOrderFromMaster(models, masterId);
+    const responders = clockwiseOrder.filter(m => m.id !== masterId);
+    const respondersWhoNeedToJudge = responders.filter(m => !m.hasJudged);
+
+    if (respondersWhoNeedToJudge.length > 0) {
+      // Find the first responder who hasn't judged (in clockwise order)
+      return respondersWhoNeedToJudge[0]?.id ?? null;
+    }
+
+    // All responders judged, check if master still needs to judge
+    const master = models.find(m => m.id === masterId);
+    if (master && !master.hasJudged) {
+      return master.id;
+    }
+
+    return null;
   }
 
   return null;
@@ -175,11 +216,17 @@ export function ArenaPage() {
       else if (data.stepType === 'model_judge') roundStatus = 'judging';
       else if (data.stepType === 'scoring') roundStatus = 'scoring';
 
+      // Check if we're transitioning TO judging phase
+      const isTransitioningToJudging =
+        data.stepType === 'model_judge' && prev.roundStatus !== 'judging';
+
       const models = prev.models.map((m) => ({
         ...m,
         status: m.id === data.actorId
           ? (data.stepType === 'model_judge' ? 'judging' as const : 'thinking' as const)
           : m.status,
+        // Clear answer preview when entering judging phase
+        answerPreview: isTransitioningToJudging ? undefined : m.answerPreview,
       }));
 
       return {
@@ -188,6 +235,8 @@ export function ArenaPage() {
         currentActorId: data.actorId ?? null,
         roundStatus,
         models,
+        // Clear answer previews when entering judging phase
+        answerPreviews: isTransitioningToJudging ? {} : prev.answerPreviews,
         nextActorId: getNextActorId(models, prev.masterId, roundStatus),
       };
     });
@@ -204,7 +253,6 @@ export function ArenaPage() {
 
       let updatedState = { ...prev, currentStepType: null, currentActorId: null };
 
-      // Update based on step type
       if (data.stepType === 'master_topic' && data.output.selectedTopic) {
         updatedState.topicName = data.output.selectedTopic;
       } else if (data.stepType === 'master_question' && data.output.question) {
@@ -212,7 +260,6 @@ export function ArenaPage() {
         updatedState.roundStatus = 'answering';
       }
 
-      // Track answer preview
       if (data.stepType === 'model_answer' && data.actorId && data.output.answerPreview) {
         const preview = getPreviewWords(String(data.output.answerPreview), 15);
         updatedState.answerPreviews = {
@@ -221,7 +268,6 @@ export function ArenaPage() {
         };
       }
 
-      // Update model status and merge answer previews
       updatedState.models = prev.models.map((m) => {
         const answerPreview = updatedState.answerPreviews[m.id];
 
@@ -238,7 +284,6 @@ export function ArenaPage() {
         return { ...m, status: 'idle' as const, answerPreview };
       });
 
-      // Calculate next actor
       updatedState.nextActorId = getNextActorId(
         updatedState.models,
         updatedState.masterId,
@@ -248,7 +293,6 @@ export function ArenaPage() {
       return updatedState;
     });
 
-    // Add activity based on step type
     if (data.stepType === 'master_topic') {
       addActivity({ type: 'step', message: `Topic selected: ${data.output.selectedTopic}` });
     } else if (data.stepType === 'master_question') {
@@ -260,9 +304,58 @@ export function ArenaPage() {
     }
   }, [addActivity]);
 
+  // Handle step undone
+  const handleStepUndone = useCallback((data: StepUndoneEvent) => {
+    setArenaState((prev) => {
+      if (!prev) return null;
+
+      let updatedState = { ...prev };
+
+      if (data.clearedFields.topicId) {
+        updatedState.topicName = null;
+      }
+      if (data.clearedFields.questionContent) {
+        updatedState.questionContent = null;
+      }
+
+      updatedState.roundStatus = data.newRoundStatus;
+      updatedState.currentStepType = null;
+      updatedState.currentActorId = null;
+
+      if (data.deletedStepType === 'model_answer' && data.deletedActorId) {
+        updatedState.models = prev.models.map((m) => {
+          if (m.id === data.deletedActorId) {
+            return { ...m, status: 'idle' as const, hasAnswered: false, answerPreview: undefined };
+          }
+          return m;
+        });
+        const { [data.deletedActorId]: _, ...restPreviews } = updatedState.answerPreviews;
+        updatedState.answerPreviews = restPreviews;
+      } else if (data.deletedStepType === 'model_judge' && data.deletedActorId) {
+        updatedState.models = prev.models.map((m) => {
+          if (m.id === data.deletedActorId) {
+            return { ...m, status: 'idle' as const, hasJudged: false };
+          }
+          return m;
+        });
+      } else {
+        updatedState.models = prev.models.map((m) => ({ ...m, status: 'idle' as const }));
+      }
+
+      updatedState.nextActorId = getNextActorId(
+        updatedState.models,
+        updatedState.masterId,
+        updatedState.roundStatus
+      );
+
+      return updatedState;
+    });
+
+    addActivity({ type: 'info', message: 'Step reverted' });
+  }, [addActivity]);
+
   // Handle round completed
   const handleRoundCompleted = useCallback((data: RoundCompletedEvent) => {
-    // Build scores array from the event data
     const scoreEntries = Object.entries(data.scores);
     const sortedScores = scoreEntries
       .sort(([, a], [, b]) => b - a)
@@ -277,7 +370,6 @@ export function ArenaPage() {
         };
       });
 
-    // Set data for overlay
     setRoundCompleteData({
       roundNumber: data.roundNumber,
       question: arenaState?.questionContent ?? '',
@@ -286,10 +378,8 @@ export function ArenaPage() {
       scores: sortedScores,
     });
 
-    // Show overlay
     setShowRoundComplete(true);
 
-    // Update arena state
     setArenaState((prev) => prev ? {
       ...prev,
       completedRounds: data.roundNumber,
@@ -302,10 +392,7 @@ export function ArenaPage() {
       nextActorId: null,
     } : null);
 
-    addActivity({
-      type: 'score',
-      message: `Round ${data.roundNumber} complete!`,
-    });
+    addActivity({ type: 'score', message: `Round ${data.roundNumber} complete!` });
   }, [arenaState, addActivity]);
 
   // Connect to SSE
@@ -314,10 +401,11 @@ export function ArenaPage() {
     onRoundStarted: handleRoundStarted,
     onStepStarted: handleStepStarted,
     onStepCompleted: handleStepCompleted,
+    onStepUndone: handleStepUndone,
     onRoundCompleted: handleRoundCompleted,
   });
 
-  // Use API data as fallback if no SSE state yet
+  // Use API data as fallback
   const displayState = arenaState ?? (initialState?.data ? {
     sessionId: initialState.data.session?.id ?? null,
     sessionStatus: initialState.data.session?.status ?? null,
@@ -344,6 +432,36 @@ export function ArenaPage() {
     answerPreviews: {},
   } : null);
 
+  // Build model color map for status bar
+  const modelColorMap = useMemo(() => {
+    if (!displayState) return {};
+    const map: Record<string, { id: string; displayName: string; color: string }> = {};
+    displayState.models.forEach((m, i) => {
+      map[m.id] = { id: m.id, displayName: m.displayName, color: getModelColorByIndex(i) };
+    });
+    return map;
+  }, [displayState]);
+
+  // Get master color
+  const masterColor = displayState?.masterId ? modelColorMap[displayState.masterId]?.color : undefined;
+
+  // Modal navigation handler
+  const handleModalNavigate = useCallback((direction: 'prev' | 'next') => {
+    if (!displayState || !selectedModelId) return;
+
+    const modelIds = displayState.models.map(m => m.id);
+    const currentIndex = modelIds.indexOf(selectedModelId);
+
+    if (direction === 'prev' && currentIndex > 0) {
+      setSelectedModelId(modelIds[currentIndex - 1]);
+    } else if (direction === 'next' && currentIndex < modelIds.length - 1) {
+      setSelectedModelId(modelIds[currentIndex + 1]);
+    }
+  }, [displayState, selectedModelId]);
+
+  // Get selected model index for navigation
+  const selectedModelIndex = displayState?.models.findIndex(m => m.id === selectedModelId) ?? -1;
+
   // Loading state
   if (isLoading && !arenaState) {
     return <ArenaLoadingState />;
@@ -361,53 +479,65 @@ export function ArenaPage() {
       initial="initial"
       animate="animate"
     >
-      {/* Header - minimal, asymmetric */}
-      <header className="px-4 md:px-6 py-4 flex items-center justify-between border-b border-[var(--color-bg-tertiary)]">
-        <div>
-          <h1 className="text-xl md:text-2xl font-medium text-[var(--color-text-primary)]">
-            AI Arena
-          </h1>
-          <p className="text-xs md:text-sm text-[var(--color-text-muted)] mt-1">
-            Round {displayState.roundNumber ?? '-'} of {displayState.totalRounds ?? '-'}
-          </p>
-        </div>
+      {/* Header */}
+      <header className="px-4 md:px-6 py-3 flex items-center justify-between border-b border-[var(--color-bg-tertiary)]">
         <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-lg md:text-xl font-medium text-[var(--color-text-primary)]">
+              AI Arena
+            </h1>
+          </div>
           <ConnectionStatus isConnected={isConnected} reconnectAttempts={reconnectAttempts} />
-          <RoundProgress
-            current={displayState.completedRounds ?? 0}
-            total={displayState.totalRounds ?? 0}
-          />
         </div>
+        <RoundProgress
+          current={displayState.completedRounds ?? 0}
+          total={displayState.totalRounds ?? 0}
+        />
       </header>
 
-      {/* Main content - asymmetric grid */}
-      <main className="px-4 md:px-6 py-6">
+      {/* Status Bar */}
+      <div className="px-4 md:px-6 py-3">
+        <GameStatusBar
+          sessionStatus={displayState.sessionStatus ?? undefined}
+          roundStatus={displayState.roundStatus ?? undefined}
+          currentStepType={displayState.currentStepType ?? undefined}
+          currentActor={displayState.currentActorId ? modelColorMap[displayState.currentActorId] : undefined}
+          master={displayState.masterId ? modelColorMap[displayState.masterId] : undefined}
+          roundNumber={displayState.roundNumber ?? undefined}
+          totalRounds={displayState.totalRounds ?? undefined}
+        />
+      </div>
+
+      {/* Main content */}
+      <main className="px-4 md:px-6 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Arena Circle - takes most space */}
+          {/* Arena Circle */}
           <div className="lg:col-span-7 xl:col-span-8">
             <ArenaCircle
               models={displayState.models}
               masterId={displayState.masterId ?? undefined}
               currentActorId={displayState.currentActorId ?? undefined}
               nextActorId={displayState.nextActorId ?? undefined}
-              currentStepType={displayState.currentStepType ?? undefined}
-              sessionStatus={displayState.sessionStatus ?? undefined}
-              roundStatus={displayState.roundStatus ?? undefined}
+              roundPhase={
+                displayState.roundStatus === 'answering' ? 'answering' :
+                displayState.roundStatus === 'judging' ? 'judging' : null
+              }
               onModelClick={setSelectedModelId}
             />
           </div>
 
-          {/* Side panel - narrower, different rhythm */}
-          <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+          {/* Side panel */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-4">
             {/* Current Question */}
             <QuestionPanel
               question={displayState.questionContent}
               topic={displayState.topicName ?? undefined}
               masterName={displayState.masterName ?? undefined}
+              masterColor={masterColor}
             />
 
-            {/* Live Activity Feed */}
-            <ActivityFeed activities={activities} />
+            {/* Activity Feed - collapsed by default */}
+            <ActivityFeed activities={activities} defaultCollapsed={true} />
           </div>
         </div>
       </main>
@@ -418,6 +548,9 @@ export function ArenaPage() {
           modelId={selectedModelId}
           roundId={displayState.currentRoundId ?? undefined}
           onClose={() => setSelectedModelId(null)}
+          onNavigate={handleModalNavigate}
+          hasPrev={selectedModelIndex > 0}
+          hasNext={selectedModelIndex < displayState.models.length - 1}
         />
       )}
 
@@ -457,31 +590,28 @@ function ArenaEmptyState({ isConnected }: { isConnected: boolean }) {
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
       <div className="text-center max-w-lg px-6">
-        {/* Animated icon */}
-        <div className="relative w-24 h-24 mx-auto mb-8">
-          {/* Outer ring */}
+        <div className="relative w-20 h-20 mx-auto mb-6">
           <motion.div
             className="absolute inset-0 rounded-full border-2 border-[var(--color-bg-tertiary)]"
             animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }}
             transition={{ duration: 3, repeat: Infinity }}
           />
-          {/* Inner circle */}
-          <div className="absolute inset-4 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center">
+          <div className="absolute inset-3 rounded-full bg-[var(--color-bg-secondary)] flex items-center justify-center">
             {isConnected ? (
-              <Wifi className="w-8 h-8 text-[var(--color-text-muted)]" />
+              <Wifi className="w-6 h-6 text-[var(--color-text-muted)]" />
             ) : (
-              <WifiOff className="w-8 h-8 text-[var(--color-text-muted)]" />
+              <WifiOff className="w-6 h-6 text-[var(--color-text-muted)]" />
             )}
           </div>
         </div>
 
-        <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-3">
+        <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-2">
           {isConnected ? 'Arena Ready' : 'Connecting...'}
         </h2>
 
-        <p className="text-[var(--color-text-secondary)] mb-4">
+        <p className="text-sm text-[var(--color-text-secondary)] mb-3">
           {isConnected
-            ? 'The arena is waiting for a game session to begin. Once started, AI models will compete in real-time.'
+            ? 'Waiting for a game session to begin.'
             : 'Attempting to connect to the arena server...'}
         </p>
 
@@ -489,7 +619,7 @@ function ArenaEmptyState({ isConnected }: { isConnected: boolean }) {
           {isConnected ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[var(--color-success)]" />
-              Connected and listening
+              Connected
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">
@@ -511,7 +641,7 @@ function ConnectionStatus({ isConnected, reconnectAttempts }: { isConnected: boo
           isConnected ? 'bg-[var(--color-success)]' : 'bg-[var(--color-error)]'
         }`}
       />
-      <span className="text-[var(--color-text-muted)] hidden md:inline">
+      <span className="text-[var(--color-text-muted)]">
         {isConnected ? 'Live' : `Reconnecting${reconnectAttempts > 0 ? ` (${reconnectAttempts})` : ''}`}
       </span>
     </div>

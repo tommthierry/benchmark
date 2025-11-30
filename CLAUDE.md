@@ -4,7 +4,7 @@
 
 SABE (Systeme Autonome de Benchmarking Evolutif) is an autonomous LLM benchmarking platform. Single Docker container, Node.js monorepo.
 
-**Current Status:** AI Arena COMPLETE - All 4 phases implemented
+**Current Status:** AI Arena COMPLETE - All 5 phases implemented (0-4)
 
 **All AI Arena phases completed!** The system is fully functional.
 
@@ -123,6 +123,7 @@ Implementation is split into phases in `plan/`:
 - **Phase 1:** ✅ COMPLETED - Game Engine (sessions, rounds, steps, judging)
 - **Phase 2:** ✅ COMPLETED - Real-time SSE Layer (event bridge, useArenaEvents hook)
 - **Phase 3:** ✅ COMPLETED - Public Arena UI (circular layout, real-time updates)
+- **Phase 4:** ✅ COMPLETED - Judging Phase UX (bubble clearing, modal tabs, navigation)
 
 ## AI Arena Game Engine (Phase 1)
 
@@ -138,6 +139,7 @@ Arena API endpoints:
 - `POST /api/arena/sessions/:id/pause` - Pause session
 - `POST /api/arena/trigger` - Execute next step (manual mode)
 - `GET /api/arena/current` - Current game state for display
+- `POST /api/arena/undo` - Step back - completely erase last step
 - `GET /api/arena/rounds/:id` - Round detail with steps/judgments
 - `GET /api/arena/rounds/:id/scores` - Round rankings
 - `GET /api/arena/rounds/:roundId/models/:modelId` - Model round detail
@@ -154,6 +156,11 @@ curl -X POST http://localhost:3000/api/arena/trigger \
   -H "Content-Type: application/json" \
   -d '{}'
 
+# Step back (erase last step completely)
+curl -X POST http://localhost:3000/api/arena/undo \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
 # Check current state
 curl http://localhost:3000/api/arena/current
 ```
@@ -163,8 +170,11 @@ curl http://localhost:3000/api/arena/current
 2. **Topic Selection** - Master picks from question types
 3. **Question Creation** - Master generates question
 4. **Answering** - Each non-master model answers sequentially
-5. **Judging** - All models judge (master included)
+5. **Judging** - First answerer judges first → other responders → Master judges LAST
 6. **Scoring** - Aggregate scores, master breaks ties
+
+**LLM Retry Logic:**
+All LLM calls automatically retry up to 3 times with exponential backoff (1s, 2s, 4s) on transient errors (rate limits, timeouts, network errors).
 
 Database tables:
 - `game_sessions` - Session tracking

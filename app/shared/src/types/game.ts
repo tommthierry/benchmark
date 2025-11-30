@@ -214,3 +214,8 @@ export interface SessionStartResult {
   totalRounds: number;
   modelCount: number;
 }
+
+export interface RedoStepResult {
+  deletedStep: StepInfo | null;
+  newRoundStatus: RoundStatus | null;
+}

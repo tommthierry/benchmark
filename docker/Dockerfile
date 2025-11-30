@@ -39,6 +39,7 @@ RUN npm install --omit=dev --workspace=app/shared --workspace=app/server
 COPY --from=builder /app/app/shared/dist ./app/shared/dist
 COPY --from=builder /app/app/server/dist ./app/server/dist
 COPY --from=builder /app/app/client/dist ./app/client/dist
+COPY --from=builder /app/app/server/drizzle ./app/server/drizzle
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data

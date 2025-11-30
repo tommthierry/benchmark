@@ -72,14 +72,19 @@ app.use('/api/arena', arenaRouter);
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../client/dist');
   app.use(express.static(clientDist));
-  // Express 5 requires named wildcard parameters
-  app.get('{*path}', (req, res, next) => {
-    // Don't serve index.html for API routes
+
+  // SPA fallback - serve index.html for all non-API routes
+  const serveIndex = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
     res.sendFile(path.join(clientDist, 'index.html'));
-  });
+  };
+
+  // Handle root path explicitly
+  app.get('/', serveIndex);
+  // Handle all other paths (Express 5 wildcard syntax)
+  app.get('/{*path}', serveIndex);
 }
 
 // Error handling - must be after all routes

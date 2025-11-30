@@ -15,6 +15,8 @@ import {
   CheckCircle,
   Clock,
   Target,
+  RotateCcw,
+  RotateCw,
 } from 'lucide-react';
 import { arenaApi, configApi } from '../../lib/api';
 import type { CurrentArenaState, ArenaModel } from '@sabe/shared';
@@ -332,12 +334,22 @@ function NextStepCard({
     },
   });
 
+  const undoMutation = useMutation({
+    mutationFn: () => arenaApi.undo(state?.session?.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['arena'] });
+    },
+  });
+
   // Determine what happens next
   const nextStep = getNextStepInfo(state);
   const canTrigger = state?.session &&
     state.session.status !== 'completed' &&
     state.session.status !== 'failed' &&
     state.session.status !== 'paused';
+
+  // Can redo if there's an active round (which means steps exist)
+  const canRedo = state?.currentRound && isManual;
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 border-2 border-blue-500/30">
@@ -358,26 +370,52 @@ function NextStepCard({
         <div className="text-sm text-gray-500 mt-1">{nextStep.description}</div>
       </div>
 
-      {/* Manual trigger button */}
+      {/* Manual mode buttons */}
       {isManual && (
-        <button
-          onClick={() => triggerMutation.mutate()}
-          disabled={triggerMutation.isPending || !canTrigger}
-          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500
-                     rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-        >
-          {triggerMutation.isPending ? (
-            <>
-              <RefreshCw className="animate-spin" size={18} />
-              Executing...
-            </>
-          ) : (
-            <>
-              <Play size={18} />
-              Execute Next Step
-            </>
-          )}
-        </button>
+        <div className="flex gap-3">
+          {/* Step Back Button */}
+          <button
+            onClick={() => undoMutation.mutate()}
+            disabled={undoMutation.isPending || !canRedo}
+            className="flex-1 py-3 px-4 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-700
+                       disabled:text-gray-500 rounded-lg font-medium transition-colors
+                       flex items-center justify-center gap-2"
+            title="Erase the last step completely"
+          >
+            {undoMutation.isPending ? (
+              <>
+                <RefreshCw className="animate-spin" size={18} />
+                Reverting...
+              </>
+            ) : (
+              <>
+                <RotateCcw size={18} />
+                Step Back
+              </>
+            )}
+          </button>
+
+          {/* Execute Button */}
+          <button
+            onClick={() => triggerMutation.mutate()}
+            disabled={triggerMutation.isPending || !canTrigger}
+            className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700
+                       disabled:text-gray-500 rounded-lg font-medium transition-colors
+                       flex items-center justify-center gap-2"
+          >
+            {triggerMutation.isPending ? (
+              <>
+                <RefreshCw className="animate-spin" size={18} />
+                Executing...
+              </>
+            ) : (
+              <>
+                <Play size={18} />
+                Execute Next Step
+              </>
+            )}
+          </button>
+        </div>
       )}
 
       {!isManual && (
@@ -386,9 +424,10 @@ function NextStepCard({
         </div>
       )}
 
-      {triggerMutation.isError && (
+      {/* Error messages */}
+      {(triggerMutation.isError || undoMutation.isError) && (
         <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-400">
-          {(triggerMutation.error as Error).message}
+          {((triggerMutation.error || undoMutation.error) as Error).message}
         </div>
       )}
     </div>
@@ -527,10 +566,25 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
     },
   });
 
+  // Restart: end current session then create a new one
+  const restartMutation = useMutation({
+    mutationFn: async () => {
+      if (state?.session?.id) {
+        await arenaApi.endSession(state.session.id);
+      }
+      return arenaApi.createSession({ totalRounds: roundsPerSession });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['arena'] });
+    },
+  });
+
   const session = state?.session;
   const canCreate = !session || session.status === 'completed' || session.status === 'failed';
   const canPause = session?.status === 'running';
   const canResume = session?.status === 'paused' || session?.status === 'created';
+  // Can restart if there's an active session (not completed/failed)
+  const canRestart = session && session.status !== 'completed' && session.status !== 'failed';
 
   return (
     <div className="bg-gray-800 rounded-lg p-6">
@@ -540,21 +594,41 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
       </h2>
 
       <div className="space-y-3">
-        {/* Create New Session */}
-        <button
-          onClick={() => createSessionMutation.mutate()}
-          disabled={!canCreate || createSessionMutation.isPending}
-          className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-700
-                     disabled:text-gray-500 rounded-lg font-medium transition-colors
-                     flex items-center justify-center gap-2"
-        >
-          {createSessionMutation.isPending ? (
-            <RefreshCw className="animate-spin" size={16} />
-          ) : (
-            <Plus size={16} />
-          )}
-          New Session ({roundsPerSession} rounds)
-        </button>
+        {/* Create New Session - only when no active session */}
+        {canCreate && (
+          <button
+            onClick={() => createSessionMutation.mutate()}
+            disabled={createSessionMutation.isPending}
+            className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-700
+                       disabled:text-gray-500 rounded-lg font-medium transition-colors
+                       flex items-center justify-center gap-2"
+          >
+            {createSessionMutation.isPending ? (
+              <RefreshCw className="animate-spin" size={16} />
+            ) : (
+              <Plus size={16} />
+            )}
+            New Session ({roundsPerSession} rounds)
+          </button>
+        )}
+
+        {/* Restart Game - always available when there's an active session */}
+        {canRestart && (
+          <button
+            onClick={() => restartMutation.mutate()}
+            disabled={restartMutation.isPending}
+            className="w-full py-2 px-4 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700
+                       disabled:text-gray-500 rounded-lg font-medium transition-colors
+                       flex items-center justify-center gap-2"
+          >
+            {restartMutation.isPending ? (
+              <RefreshCw className="animate-spin" size={16} />
+            ) : (
+              <RotateCw size={16} />
+            )}
+            Restart Game
+          </button>
+        )}
 
         {/* Pause Button */}
         <button
@@ -589,9 +663,9 @@ function SessionControlsCard({ state }: { state: CurrentArenaState | null }) {
         </button>
       </div>
 
-      {(createSessionMutation.isError || pauseMutation.isError || startMutation.isError) && (
+      {(createSessionMutation.isError || pauseMutation.isError || startMutation.isError || restartMutation.isError) && (
         <div className="mt-3 p-3 bg-red-900/20 border border-red-700/50 rounded-lg text-sm text-red-400">
-          {((createSessionMutation.error || pauseMutation.error || startMutation.error) as Error)?.message}
+          {((createSessionMutation.error || pauseMutation.error || startMutation.error || restartMutation.error) as Error)?.message}
         </div>
       )}
     </div>

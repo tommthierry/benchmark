@@ -147,11 +147,13 @@ function mapEventName(internalType: string): ArenaEventType {
     session_started: 'session:started',
     session_paused: 'session:paused',
     session_completed: 'session:completed',
+    session_ended: 'session:ended',
     session_failed: 'session:failed',
     round_started: 'round:started',
     round_completed: 'round:completed',
     step_started: 'step:started',
     step_completed: 'step:completed',
+    step_undone: 'step:undone',
   };
 
   return mapping[internalType] ?? (internalType as ArenaEventType);
@@ -201,6 +203,61 @@ function stopHeartbeat(): void {
 let isInitialized = false;
 
 /**
+ * Broadcast a fresh state snapshot to all connected clients
+ * Used when session state changes significantly (create, end)
+ */
+export async function broadcastStateSnapshot(): Promise<void> {
+  const engine = getGameEngine();
+  const state = await engine.getCurrentState();
+
+  const snapshot: StateSnapshotEvent = {
+    type: 'state_snapshot',
+    timestamp: new Date().toISOString(),
+    session: state?.session
+      ? {
+          id: state.session.id,
+          status: state.session.status,
+          totalRounds: state.session.totalRounds,
+          completedRounds: state.session.completedRounds,
+          currentRoundId: state.session.currentRoundId,
+        }
+      : null,
+    currentRound: state?.currentRound
+      ? {
+          id: state.currentRound.id,
+          roundNumber: state.currentRound.roundNumber,
+          status: state.currentRound.status,
+          masterId: state.currentRound.masterId,
+          masterName: state.currentRound.masterName,
+          topicId: state.currentRound.topicId,
+          topicName: state.currentRound.topicName,
+          questionContent: state.currentRound.questionContent,
+          questionDifficulty: state.currentRound.questionDifficulty,
+        }
+      : null,
+    currentStep: state?.currentStep
+      ? {
+          id: state.currentStep.id,
+          stepType: state.currentStep.stepType,
+          status: state.currentStep.status,
+          actorModelId: state.currentStep.actorModelId,
+          actorModelName: state.currentStep.actorModelName,
+        }
+      : null,
+    models: state?.models?.map((m): StateSnapshotModel => ({
+      id: m.id,
+      displayName: m.displayName,
+      status: m.status,
+      hasAnswered: m.hasAnswered,
+      hasJudged: m.hasJudged,
+    })) ?? [],
+  };
+
+  broadcastEvent('state_snapshot', snapshot);
+  logger.debug({ clientCount: clients.size }, 'Broadcast state snapshot to all clients');
+}
+
+/**
  * Initialize the event bridge
  * Call this once at server startup
  */
@@ -213,7 +270,7 @@ export function initializeEventBridge(): void {
   const engine = getGameEngine();
 
   // Listen to all game engine events
-  engine.on('event', (event: GameEvent) => {
+  engine.on('event', async (event: GameEvent) => {
     const sseEventName = mapEventName(event.type);
 
     logger.debug(
@@ -230,6 +287,12 @@ export function initializeEventBridge(): void {
 
     // Broadcast to all connected clients
     broadcastEvent(sseEventName, eventData);
+
+    // For session creation/end events, also broadcast a full state snapshot
+    // so clients can reset their local state completely
+    if (event.type === 'session_created' || event.type === 'session_ended') {
+      await broadcastStateSnapshot();
+    }
   });
 
   // Start heartbeat

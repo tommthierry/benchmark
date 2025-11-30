@@ -200,6 +200,24 @@ router.post('/sessions/:id/pause', async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/arena/sessions/:id/end
+ * Force-end a session (mark as completed regardless of progress)
+ * Used when restarting a new game
+ */
+router.post('/sessions/:id/end', async (req, res, next) => {
+  try {
+    const engine = getGameEngine();
+    await engine.endSession(req.params.id);
+    res.json({ data: { status: 'ended', sessionId: req.params.id } });
+  } catch (error) {
+    if ((error as Error).message.includes('not found')) {
+      return res.status(404).json({ error: (error as Error).message });
+    }
+    next(error);
+  }
+});
+
 // =============================================================================
 // MANUAL TRIGGER ENDPOINT
 // =============================================================================
@@ -226,6 +244,32 @@ router.post('/trigger', async (req, res, next) => {
   } catch (error) {
     if ((error as Error).message.includes('Cannot execute step')) {
       return res.status(400).json({ error: (error as Error).message });
+    }
+    next(error);
+  }
+});
+
+/**
+ * POST /api/arena/undo
+ * Step back - completely erase the last step as if it never happened.
+ * Reverts all DB state, round fields, and broadcasts SSE event for UI sync.
+ */
+router.post('/undo', async (req, res, next) => {
+  try {
+    const { sessionId } = req.body as { sessionId?: string };
+
+    const engine = getGameEngine();
+    const result = await engine.undoLastStep(sessionId);
+
+    res.json({ data: result });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (
+      message.includes('No active session') ||
+      message.includes('No active round') ||
+      message.includes('No steps to undo')
+    ) {
+      return res.status(400).json({ error: message });
     }
     next(error);
   }

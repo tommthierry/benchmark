@@ -21,11 +21,13 @@ export type ArenaEventType =
   | 'session:started'
   | 'session:paused'
   | 'session:completed'
+  | 'session:ended'
   | 'session:failed'
   | 'round:started'
   | 'round:completed'
   | 'step:started'
-  | 'step:completed';
+  | 'step:completed'
+  | 'step:undone';
 
 // =============================================================================
 // BASE EVENT
@@ -119,6 +121,11 @@ export interface SessionCompletedEvent extends BaseArenaEvent {
   sessionId: string;
 }
 
+export interface SessionEndedEvent extends BaseArenaEvent {
+  type: 'session:ended';
+  sessionId: string;
+}
+
 export interface SessionFailedEvent extends BaseArenaEvent {
   type: 'session:failed';
   sessionId: string;
@@ -179,6 +186,24 @@ export interface StepCompletedEvent extends BaseArenaEvent {
 }
 
 // =============================================================================
+// STEP UNDONE EVENT (for step back functionality)
+// =============================================================================
+
+export interface StepUndoneEvent extends BaseArenaEvent {
+  type: 'step:undone';
+  sessionId: string;
+  roundId: string;
+  deletedStepType: StepType;
+  deletedActorId?: string;
+  newRoundStatus: RoundStatus;
+  /** Fields that were cleared from the round */
+  clearedFields: {
+    topicId?: boolean;
+    questionContent?: boolean;
+  };
+}
+
+// =============================================================================
 // UNION TYPE
 // =============================================================================
 
@@ -189,8 +214,10 @@ export type ArenaEvent =
   | SessionStartedEvent
   | SessionPausedEvent
   | SessionCompletedEvent
+  | SessionEndedEvent
   | SessionFailedEvent
   | RoundStartedEvent
   | RoundCompletedEvent
   | StepStartedEvent
-  | StepCompletedEvent;
+  | StepCompletedEvent
+  | StepUndoneEvent;

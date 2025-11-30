@@ -33,6 +33,20 @@
   --color-next-ring: #60a5fa;
   --color-next-ring-glow: rgba(96, 165, 250, 0.3);
 
+  /* Model color palette - 12 distinct, muted colors for model identification */
+  --model-color-0: #ef4444; /* Red */
+  --model-color-1: #f97316; /* Orange */
+  --model-color-2: #eab308; /* Yellow */
+  --model-color-3: #22c55e; /* Green */
+  --model-color-4: #14b8a6; /* Teal */
+  --model-color-5: #06b6d4; /* Cyan */
+  --model-color-6: #3b82f6; /* Blue */
+  --model-color-7: #8b5cf6; /* Violet */
+  --model-color-8: #a855f7; /* Purple */
+  --model-color-9: #ec4899; /* Pink */
+  --model-color-10: #f43f5e; /* Rose */
+  --model-color-11: #64748b; /* Slate */
+
   /* Typography scale (Golden Ratio: 1.618) */
   --text-xs: 0.694rem;
   --text-sm: 0.833rem;

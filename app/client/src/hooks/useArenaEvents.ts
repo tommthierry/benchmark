@@ -11,6 +11,7 @@ import type {
   RoundCompletedEvent,
   StepStartedEvent,
   StepCompletedEvent,
+  StepUndoneEvent,
   SessionCompletedEvent,
 } from '@sabe/shared';
 
@@ -33,6 +34,9 @@ export interface UseArenaEventsOptions {
 
   /** Called when a step completes */
   onStepCompleted?: (data: StepCompletedEvent) => void;
+
+  /** Called when a step is undone (step back) */
+  onStepUndone?: (data: StepUndoneEvent) => void;
 
   /** Called when a round completes with scores */
   onRoundCompleted?: (data: RoundCompletedEvent) => void;
@@ -115,6 +119,7 @@ export function useArenaEvents(
 
       case 'step:started':
       case 'step:completed':
+      case 'step:undone':
         queryClient.invalidateQueries({ queryKey: ['arena', 'current'] });
         break;
 
@@ -216,6 +221,9 @@ export function useArenaEvents(
     });
     addEventHandler<StepCompletedEvent>('step:completed', (data) => {
       callbacksRef.current.onStepCompleted?.(data);
+    });
+    addEventHandler<StepUndoneEvent>('step:undone', (data) => {
+      callbacksRef.current.onStepUndone?.(data);
     });
     addEventHandler<RoundCompletedEvent>('round:completed', (data) => {
       callbacksRef.current.onRoundCompleted?.(data);

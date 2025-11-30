@@ -314,6 +314,7 @@ import type {
   CurrentArenaState,
   CreateSessionOptions,
   TriggerStepResult,
+  RedoStepResult,
   ModelRoundDetail,
   RoundScores,
   GameSessionInfo,
@@ -364,9 +365,21 @@ export const arenaApi = {
       method: 'POST',
     }),
 
+  endSession: (id: string) =>
+    fetchApi<{ data: { status: string; sessionId: string } }>(`/arena/sessions/${id}/end`, {
+      method: 'POST',
+    }),
+
   // Manual mode
   trigger: (sessionId?: string) =>
     fetchApi<{ data: TriggerStepResult }>('/arena/trigger', {
+      method: 'POST',
+      body: JSON.stringify(sessionId ? { sessionId } : {}),
+    }),
+
+  // Step back - undo the last step completely
+  undo: (sessionId?: string) =>
+    fetchApi<{ data: RedoStepResult }>('/arena/undo', {
       method: 'POST',
       body: JSON.stringify(sessionId ? { sessionId } : {}),
     }),

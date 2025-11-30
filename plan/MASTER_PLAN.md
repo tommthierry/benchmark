@@ -49,6 +49,8 @@ Each round follows this sequence:
 | **0** | Admin Game Control Panel | `/admin/game` with full state + manual trigger | ✅ COMPLETED |
 | **1** | Arena UI Enhancements | Speech bubbles, thinking states, next indicator | ✅ COMPLETED |
 | **2** | Round Completion UX | Leaderboard overlay, score animations | ✅ COMPLETED |
+| **3** | Game Engine Fixes | Judging order, LLM retry, step redo | ✅ COMPLETED |
+| **4** | Judging Phase UX | Clear bubbles on judging, modal tabs, navigation | ✅ COMPLETED |
 
 ## Phase Details
 
@@ -99,6 +101,21 @@ Add round completion experience:
 - `app/client/src/components/arena/ScoreAnimation.tsx` (NEW)
 - `app/client/src/pages/ArenaPage.tsx` (integrate overlay)
 
+### Phase 3: Game Engine Fixes
+**Duration:** ~2 hours
+
+Critical fixes for game engine logic and manual mode control:
+- Fix judging order (first answerer judges first, master judges LAST)
+- Add LLM retry logic with exponential backoff
+- Add "redo step" functionality for manual mode
+
+**Files Modified:**
+- `app/server/src/services/game-engine.ts` (judging order, retry, redo)
+- `app/server/src/api/arena.ts` (add `/redo` endpoint)
+- `app/shared/src/types/game.ts` (add `RedoStepResult` type)
+- `app/client/src/lib/api.ts` (add redo API method)
+- `app/client/src/pages/admin/GamePage.tsx` (add redo button)
+
 ## Technical Decisions
 
 ### State Management
@@ -111,13 +128,13 @@ Add round completion experience:
 - CSS-first approach for speech bubbles (pseudo-elements)
 - Tailwind CSS 4 for styling
 
-### API Changes
-- No backend changes required
-- All needed endpoints already exist:
-  - `GET /api/arena/current` - Full state
-  - `POST /api/arena/trigger` - Execute next step
-  - `POST /api/arena/sessions` - Create session
-  - `GET /api/arena/rounds/:id/scores` - Round scores
+### API Endpoints
+Key endpoints for the arena:
+- `GET /api/arena/current` - Full game state
+- `POST /api/arena/trigger` - Execute next step (manual mode)
+- `POST /api/arena/undo` - Step back (erase last step completely)
+- `POST /api/arena/sessions` - Create session
+- `GET /api/arena/rounds/:id/scores` - Round scores
 
 ## Progress Tracking
 
@@ -182,3 +199,35 @@ Before marking a phase complete:
   - Auto-dismiss after 15 seconds with progress bar
   - Smooth modal animations
 - Integrated overlay with `ArenaPage` round completion event
+
+### Phase 3 Summary (Completed)
+- Fixed judging order: first answerer judges first, master judges LAST
+  - Master can now effectively break ties with authoritative ranking
+- Added LLM retry logic with exponential backoff:
+  - 3 retries with 1s → 2s → 4s delays
+  - Retries on transient errors (rate limit, timeout, network)
+- Added true "Step Back" functionality:
+  - `POST /api/arena/undo` completely erases last step from DB
+  - Clears round fields (topic, question) when appropriate
+  - Recalculates round status based on remaining steps
+  - Broadcasts `step:undone` SSE event with `clearedFields`
+  - ArenaPage handles event to remove speech bubbles, reset model status
+  - Admin GamePage has "Step Back" button (not automatic re-execution)
+
+### Phase 4 Summary (Completed)
+- Fixed speech bubbles to clear when transitioning to judging phase
+  - Detect first `model_judge` step and clear all answer previews
+  - Master never shows a speech bubble (doesn't answer)
+- Added phase-aware bubble visibility in ModelNode
+  - Bubbles only visible during `answering` phase
+  - `roundPhase` prop passed through ArenaCircle to ModelNode
+- Enhanced ModelDetailModal with tabs:
+  - Answer tab: model's answer, response time, final score, judgments received
+  - Judgments tab: rankings this model gave to other models
+- Added left/right navigation in modal:
+  - Chevron buttons on modal sides
+  - Keyboard navigation: ← → Esc
+  - Tab resets to "Answer" when navigating between models
+- Improved `getNextActorId` to correctly order judging:
+  - Responders judge first (in answer order)
+  - Master judges LAST
